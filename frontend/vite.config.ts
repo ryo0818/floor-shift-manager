@@ -6,7 +6,9 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
   return {
     plugins: [react()],
-    resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
+    resolve: {
+      alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+    },
     server: {
       port: 5173,
       proxy: {

@@ -4,7 +4,7 @@
 node_modules/
 dist/
 build/
-.env
+.env.*
 .env.local
 *.tsbuildinfo
 
