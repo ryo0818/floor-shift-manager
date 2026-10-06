@@ -1,141 +1,67 @@
-# Spring Boot API契約案
+# Python API契約
 
-フロントエンドのみの実装です。以下のAPIはバックエンド側で作成してください。元のZIPの `/api/shifts` とは異なり、今回の要件に合わせた新しい契約です。型の正本は `src/domain/model.ts`、呼び出しは `src/data/api.ts` です。
+APIは `/api`。JSONのcamelCaseはReactと統一しています。
 
-## 共通
+## 認証
 
-- JSONのキーはcamelCase。
-- 通信先は同一オリジンの `/api`。Cookie認証を想定し `credentials: include` で送信。
-- GET /api/session でCSRFトークンを取得。更新リクエストは `X-CSRF-TOKEN` に設定。
-- 認証方式の最終決定時にSpring Securityの構成と整合させる。
-- エラーは適切なステータスと `{"message":"日本語の説明"}` を返す。
-- 期間キー `period` は `YYYY-MM-01` または `YYYY-MM-16`。
-- 日付・時刻は日本時間。締切はISO 8601のオフセット付き日時。シフトの時刻はHH:mm。
-- 15分単位、日付またぎ不可、開始＜終了。休憩のフィールドなし。
-- 永続化・整合性・認証認可・同時操作制御はサーバーの責務。画面のボタン非表示は認可にならない。
-
-## GET /api/session
-
-未認証でも200とCSRFトークンを返す想定。
-
-```json
-{"session":null,"csrfToken":"token"}
-```
-
-認証済みの例：
-
-```json
-{"session":{"role":"admin","name":"管理者"},"csrfToken":"token"}
-```
-
-従業員の場合：
-
-```json
-{"session":{"role":"employee","name":"田中 葵","employeeId":"e1"},"csrfToken":"token"}
-```
-
-従業員の認証経路は未定。画面から任意のemployeeIdを指定して本人としてログインするAPIを本番に設けないこと。
-
-## POST /api/session/login
-
-```json
-{"id":"管理者ID","password":"入力したパスワード"}
-```
-
-成功時はセッションCookieを設定し、GET /api/sessionと同じ形のJSONを返す。デモのパスワードは本番で使用しない。ログイン失敗は401等で返す。
-
-## POST /api/session/logout
-
-リクエスト `{}`。セッションを無効化する。成功は200 `{}` または204。
-
-## GET /api/workspace?period=YYYY-MM-01
-
-`Workspace` 型のJSONを返す。
-
-```json
-{
-  "floors":[{"id":"f1","name":"1F ホール","color":"#236b59"}],
-  "employees":[{"id":"e1","name":"田中 葵","floorIds":["f1"]}],
-  "period":{"id":"2026-10-01","start":"2026-10-01","end":"2026-10-15","deadline":"2026-09-25T23:59:00+09:00"},
-  "submissions":[],
-  "shifts":[],
-  "policy":{"allowEarlyConfirm":false}
-}
-```
-
-### Row
-
-```json
-{"id":"r1","date":"2026-10-03","start":"09:00","end":"17:00","floorId":"f1","note":"調整可能"}
-```
-
-### Shift
-
-Rowの項目に以下を追加する。
-
-- employeeId: 対象従業員
-- status: pending / confirmed / declined
-- original: 調整前のRow
-
-### Submission
-
-```json
-{
-  "employeeId":"e1",
-  "draftRows":[],
-  "draftNote":"",
-  "submittedRows":[],
-  "submittedNote":"",
-  "submittedAt":null,
-  "dirty":false
-}
-```
-
-- submittedAtがnullなら未提出。提出済みでsubmittedRowsが空なら全日休み希望。
-- dirtyは保存済みの下書きに未提出の変更があることを示す。
-- 管理者には全員の提出内容を返すが、下書きのdraftRowsは空、draftNoteは空文字、dirtyはfalseにする。
-- 従業員には本人のEmployeeとSubmission、および割り当てられたFloorだけを返す。
-- 従業員のshiftsは空配列とし、確定内容や管理者の調整結果を配信しない。
-
-## POST /api/commands
-
-共通で `{ "period":"2026-10-01", "type":"...", ... }` を送信。成功時200 `{ "ok":true }` または204。画面は成功後にworkspaceを再取得する。
-
-### 従業員のみ
-
-| type | 追加フィールド | 動作 |
+| メソッド | パス | 内容 |
 | --- | --- | --- |
-| saveDraft | rows: Row[], note: string | 本人の下書きを保存 |
-| submit | acknowledgeOverlap: boolean | 保存済みの下書きを半月分まとめて提出・再提出 |
+| GET | /api/session | `{session,csrfToken}`。未認証ならsessionはnull。CSRF用の匿名Cookieを発行 |
+| POST | /api/session/login | `{id,password}`。認証成功時はCookieとCSRFトークンを再発行 |
+| POST | /api/session/logout | ログインセッションを失効し、新しい匿名Cookie・CSRFトークンを返す |
+| GET | /api/workspace?period=YYYY-MM-01または16 | 認証済み本人の権限で半月データを取得 |
+| POST | /api/commands | 業務操作。共通項目はperiod、type、expectedRevision |
+| GET | /api/health | APIプロセスの稼働確認。DB接続確認は起動時と実操作で実施 |
 
-本人はセッションから特定する。締切後は両操作を拒否する。空のrowsの提出は全日休み希望。希望時間が重複していてacknowledgeOverlap=falseなら確認を求めるエラーにする。
+変更系リクエストは全て `X-CSRF-TOKEN` とセッションCookieが必要です。ログイン前にもGET /sessionを呼びます。CookieはHttpOnly / SameSite=Lax、本番ではSecureも有効化します。セッションは8時間、未認証用は30分で失効します。
 
-提出時にsubmittedRows・submittedNote・submittedAtを更新し、希望から管理対象の未確定Shiftを作成する。管理者の確定／見送り済みの内容を再提出で上書きする競合を防止する。締切前の確定の仕様が未定のため、デモは管理処理済みの場合の再提出を拒否している。
+従業員のemployeeIdとroleはサーバー側アカウントに紐付けます。本人以外のIDをリクエストに付けて参照・提出する方法はありません。
 
-### 管理者のみ
+## workspace
 
-| type | 追加フィールド | 動作 |
+Reactの `src/domain/model.ts` のWorkspaceに、全体の更新番号 `revision` を加えた形です。
+
+- floors、employees：管理者は全件、従業員は本人と割り当てフロアのみ
+- period：id / start / end / deadline。締切はタイムゾーン付きISO日時
+- submissions：従業員は本人のみ。管理者への応答ではdraftRowsとdraftNoteを空にし、dirty=falseとする
+- shifts：管理者のみ返す。従業員には空配列
+- policy.allowEarlyConfirm：現在false
+- revision：取得した値を変更リクエストのexpectedRevisionで送信
+
+管理用shiftのIDは希望行のIDとは別です。提出時にサーバーでUUIDを発行します。originalに元の希望行を保持します。
+
+## commands
+
+| type | 追加の入力 | 権限 |
 | --- | --- | --- |
-| saveShift | shift: Row + employeeId, acknowledgeOverlap: boolean | 未確定シフトの追加・調整 |
-| deleteShift | id: string | 未確定シフトの削除。提出記録は保持 |
-| setStatus | ids: string[], status: pending / confirmed / declined | 個別／一括の状態変更 |
-| setDeadline | deadline: ISO日時 | 対象期間の締切設定 |
-| saveFloor | floor: Floor | フロアの登録・編集 |
-| saveEmployee | employee: Employee | 従業員の登録・編集と割り当て |
+| saveDraft | rows、note | 従業員本人、締切前 |
+| submit | acknowledgeOverlap | 従業員本人、締切前 |
+| saveShift | shift、acknowledgeOverlap | 管理者 |
+| deleteShift | id | 管理者、未確定のみ |
+| setStatus | ids、status | 管理者 |
+| setDeadline | deadline | 管理者 |
+| saveFloor | floor | 管理者 |
+| saveEmployee | employee | 管理者 |
 
-IDは画面で生成するUUIDを許容する契約。更新時は対象存在・権限を検証する。JSON内のoriginalやstatusはsaveShiftで任意に上書きさせず、サーバーで保護する。
+- rows：id、date、start、end、floorId、note
+- shift：上記にemployeeIdを加える。statusやoriginalは送信しない
+- status：pending / confirmed / declined
+- floor：id、name、color（#RRGGBB）
+- employee：id、name、floorIds
+- 成功：`{ok:true,revision:更新後の番号}`
+- 400：業務入力エラー、401：未認証・期限切れ、403：権限・CSRF・接続元違反、409：競合・締切・状態違反、422：入力スキーマ違反、429：ログイン試行制限
+- 失敗：`{message:"日本語の説明"}`。422ではfieldsも返す
 
-### setStatusの整合性
+全体で1つの更新番号を持ちます。別の利用者や別の半月で更新があった場合も409になり得ます。再取得後に操作し直します。サーバーでの自動上書き・自動再送は行いません。
 
-- pending → confirmed / declined、confirmed / declined → pendingのみ許可。
-- 確定済みの直接編集・削除を拒否し、未確定へ戻す操作を必要とする。
-- confirmedへの変更時は、同一従業員・同日の時間の重複をチェックする。
-- 条件：`既存開始 < 新終了 AND 既存終了 > 新開始`。終了と開始が等しい場合は許可。
-- 対象同士、対象と既存confirmedの両方を確認。フロアが異なっても重複禁止。
-- 対象全件を一つのトランザクションで扱い、1件でも重複すれば変更しない。
-- 同時更新でチェックをすり抜けないよう、対象従業員・日付等で整合性を保護する。
-- 409のmessageに重複する氏名・日付・時間・フロアを含めると画面に表示される。
+## PostgreSQL
 
-### 暫定の入力上限
+`metadata`、`floors`、`employees`、`periods`、`accounts`、`sessions`、`login_attempts`。
 
-フロア名・従業員名は50文字、シフトメモは500文字、提出全体メモは1000文字。これらは要件未確定のため暫定値。フロア名は重複不可。API側でも同じ制約を実装する。
+マスタと半月データはJSONB、アカウント・セッション・更新番号は専用カラム。`periods.data` にその半月のsubmissions/shiftsを保存します。SQLはパラメータ化しています。業務変更はPostgreSQLのトランザクションアドバイザリロックを取得してから更新番号・業務ルールを検証し、成功時だけコミットします。読み取りはREPEATABLE READで一貫したスナップショットを返します。
+
+初期スキーマは `python -m app.manage migrate`、初期データと管理者作成は `python -m app.manage init`。スキーマの初期化は冪等ですが、既存の将来バージョンを変更する自動移行機構ではありません。
+
+## 現在の境界
+
+従業員の公開アカウント登録、メール再発行、完全な監査ログ、確定シフトの従業員公開は未実装。約50人の初期運用を想定し、書き込みは直列化しています。高負荷・大量データ向けに最適化したDBスキーマではありません。

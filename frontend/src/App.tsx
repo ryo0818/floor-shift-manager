@@ -149,8 +149,12 @@ function Login({ onLogin }: { onLogin: (s: Session) => void }) {
           <span className="login-lock">
             <ShieldCheck size={24} />
           </span>
-          <h2>管理者ログイン</h2>
-          <p>管理者アカウントでログインしてください。</p>
+          <h2>{DEMO ? "管理者ログイン" : "ログイン"}</h2>
+          <p>
+            {DEMO
+              ? "管理者アカウントでログインしてください。"
+              : "管理者・従業員のIDとパスワードを入力してください。"}
+          </p>
           <form
             onSubmit={(e) => {
               e.preventDefault();
