@@ -43,6 +43,7 @@ Reactの `src/domain/model.ts` のWorkspaceに、全体の更新番号 `revision
 | saveFloor | floor | 管理者 |
 | deleteFloor | id | 管理者。全期間の使用確認後に削除・割り当て解除 |
 | saveEmployee | employee | 管理者 |
+| deleteEmployee | id | 管理者。全期間の使用確認後に従業員・アカウントを削除 |
 
 - rows：id、date、start、end、floorId、note
 - shift：上記にemployeeIdを加える。statusやoriginalは送信しない

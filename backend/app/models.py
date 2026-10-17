@@ -89,6 +89,11 @@ class DeleteFloor(CommandBase):
     id: Id
 
 
+class DeleteEmployee(CommandBase):
+    type: Literal["deleteEmployee"]
+    id: Id
+
+
 class SaveEmployee(CommandBase):
     type: Literal["saveEmployee"]
     employee: Employee
@@ -104,6 +109,7 @@ Command = Annotated[
         SetDeadline,
         SaveFloor,
         DeleteFloor,
+        DeleteEmployee,
         SaveEmployee,
     ],
     Field(discriminator="type"),

@@ -1314,6 +1314,16 @@ export default function App() {
                                 </div>
                               </TableCell>
                               <TableCell>
+                                <div className="employee-actions">
+                                <button className="text-btn" disabled={busy}
+                                  aria-label={`${e.name}を削除`}
+                                  onClick={()=>setConfirm({
+                                    title: `「${e.name}」を削除しますか？`,
+                                    text: "従業員情報と紐づくログインアカウントを削除し、ログイン中の端末もログアウトします。シフト・提出履歴・保存済み下書きがある場合は、全期間を確認して削除を中止します。削除は元に戻せません。",
+                                    action: async()=>{await run({type:"deleteEmployee",id:e.id},"従業員を削除しました");},
+                                  })}>
+                                  <Trash2 size={16}/>削除
+                                </button>
                                 <button
                                   className="icon-btn"
                                   aria-label={`${e.name}を編集`}
@@ -1323,6 +1333,7 @@ export default function App() {
                                 >
                                   <Pencil size={16} />
                                 </button>
+                                </div>
                               </TableCell>
                             </TableRow>
                           ))}

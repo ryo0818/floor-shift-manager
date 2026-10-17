@@ -577,3 +577,60 @@ def test_delete_floor_permissions_csrf_and_stale_revision(system):
     ok(c,'saveEmployee',employee={'id':'e3','name':'新規','floorIds':['f5']})
     assert c.post('/api/commands',json=payload).status_code == 409
     assert any(f['id']=='f5' for f in workspace(c)['floors'])
+
+
+def test_delete_employee_revokes_account_sessions_and_persists(system):
+    app, path, c = system
+    login(c)
+    with TestClient(app) as employee:
+        login(employee, 'employee2')
+        before = workspace(c)
+        ok(c, 'deleteEmployee', id='e2')
+        after = workspace(c)
+        assert after['revision'] > before['revision']
+        assert [e['id'] for e in after['employees']] == ['e1']
+        assert after['floors'] == before['floors']
+        assert employee.get('/api/workspace', params={'period':PERIOD}).status_code == 401
+        assert sign_in_with(employee,'employee2',PASSWORD).status_code == 401
+        with db.transaction(path) as con:
+            assert con.execute('SELECT 1 FROM employees WHERE id=%s', ('e2',)).fetchone() is None
+            assert con.execute('SELECT 1 FROM accounts WHERE employee_id=%s', ('e2',)).fetchone() is None
+            assert con.execute('SELECT 1 FROM sessions WHERE login=%s', ('employee2',)).fetchone() is None
+    with TestClient(create_app(path)) as restart:
+        login(restart)
+        assert workspace(restart)['employees'] == after['employees']
+    assert command(c,'deleteEmployee',id='e2').status_code == 409
+    ok(c,'saveEmployee',employee={'id':'noaccount','name':'未登録','floorIds':[]})
+    ok(c,'deleteEmployee',id='noaccount')
+
+
+@pytest.mark.parametrize('kind', ['draft', 'all_off', 'pending', 'confirmed', 'declined'])
+def test_delete_employee_rejects_history_in_other_period(system, kind):
+    app, path, c = system
+    login(c)
+    with db.transaction(path, write=True) as con:
+        state=db.load(con,'2030-03-01')
+        if kind in ('draft','all_off'):
+            state['submissions']=[{'employeeId':'e1','draftRows':[], 'submittedRows':[],
+                                   'submittedAt':None if kind=='draft' else '2030-03-01T00:00:00Z'}]
+        else:
+            state['shifts']=[{**row(date='2030-03-03'),'employeeId':'e1','status':kind}]
+        db.save(con,state)
+    before=workspace(c)
+    assert command(c,'deleteEmployee',id='e1').status_code == 409
+    assert workspace(c)==before
+    with TestClient(app) as employee:
+        assert login(employee,'employee1')['employeeId']=='e1'
+
+
+def test_delete_employee_permissions_csrf_and_revision(system):
+    app, _, c=system
+    login(c)
+    payload={'type':'deleteEmployee','id':'e2','period':PERIOD,'expectedRevision':workspace(c)['revision']}
+    assert c.post('/api/commands',json=payload,headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
+    with TestClient(app) as employee:
+        login(employee,'employee1')
+        assert command(employee,'deleteEmployee',id='e2').status_code == 403
+    ok(c,'saveEmployee',employee={'id':'e2','name':'変更','floorIds':[]})
+    assert c.post('/api/commands',json=payload).status_code == 409
+    assert any(e['id']=='e2' for e in workspace(c)['employees'])

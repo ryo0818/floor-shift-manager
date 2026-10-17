@@ -224,6 +224,15 @@ export function commandDemo(id: string, c: Command) {
     b.period.deadline = c.deadline;
     return;
   }
+  if (c.type === "deleteEmployee") {
+    if (!employees.some(e=>e.id===c.id)) throw new Error("従業員は削除済みです。再読み込みしてください。");
+    for (const bucket of buckets.values()) {
+      if ([...bucket.shifts,...bucket.submissions].some(r=>r.employeeId===c.id))
+        throw new Error("この従業員にはシフト・提出履歴・保存済み下書きがあるため削除できません（全期間）。");
+    }
+    employees = employees.filter(e=>e.id!==c.id);
+    return;
+  }
   if (c.type === "deleteFloor") {
     if (!floors.some(f=>f.id===c.id)) throw new Error("フロアは削除済みです。再読み込みしてください。");
     for (const bucket of buckets.values()) {

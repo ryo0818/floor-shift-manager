@@ -285,3 +285,15 @@ def delete_floor(state, user, floor_id, all_periods):
     state["floors"] = [f for f in state["floors"] if f["id"] != floor_id]
     for employee in state["employees"]:
         employee["floorIds"] = [f for f in employee["floorIds"] if f != floor_id]
+
+
+def delete_employee(state, user, employee_id, all_periods):
+    if user["role"] != "admin":
+        raise RuleError("管理者のみ操作できます。", 403)
+    if not any(e["id"] == employee_id for e in state["employees"]):
+        raise RuleError("従業員は削除済みです。再読み込みしてください。", 409)
+    for bucket in all_periods:
+        if any(row.get("employeeId") == employee_id
+               for row in bucket.get("shifts", []) + bucket.get("submissions", [])):
+            raise RuleError("この従業員にはシフト・希望の提出履歴・保存済み下書きがあるため削除できません。全日休みの提出を含む、過去・未来の全期間が対象です。", 409)
+    state["employees"] = [e for e in state["employees"] if e["id"] != employee_id]

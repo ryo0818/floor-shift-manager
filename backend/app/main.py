@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import auth, db
 from .models import Command, Login, CreateAccount, ResetPassword, ChangePassword
-from .service import RuleError, apply, project, delete_floor
+from .service import RuleError, apply, project, delete_floor, delete_employee
 
 
 def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
@@ -218,7 +218,17 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
                     409,
                 )
             state = db.load(con, body.period)
-            if body.type == "deleteFloor":
+            if body.type == "deleteEmployee":
+                delete_employee(state, user, body.id,
+                                (r["data"] for r in con.execute("SELECT data FROM periods")))
+                # sessions are removed by the accounts foreign key ON DELETE CASCADE.
+                accounts = con.execute("SELECT login FROM accounts WHERE employee_id=%s", (body.id,)).fetchall()
+                for account in accounts:
+                    for prefix in ("login:", "password:"):
+                        con.execute("DELETE FROM login_attempts WHERE key=%s", (prefix + auth.digest(account["login"]),))
+                con.execute("DELETE FROM accounts WHERE employee_id=%s", (body.id,))
+                con.execute("DELETE FROM employees WHERE id=%s", (body.id,))
+            elif body.type == "deleteFloor":
                 delete_floor(state, user, body.id,
                              (r["data"] for r in con.execute("SELECT data FROM periods")))
                 con.execute("DELETE FROM floors WHERE id=%s", (body.id,))

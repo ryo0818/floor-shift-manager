@@ -34,3 +34,17 @@ test('フロア削除：確認後の操作で割り当て解除、他期間の�
  assert.deepEqual(d.readDemo(other),before);
  d.demoEmployee('e1');assert.throws(()=>d.commandDemo(id,{type:'deleteFloor',id:'f5'}),/管理者のみ/);
 });
+
+test('従業員削除：未使用のみ削除、他期間の履歴と従業員の操作を拒否',()=>{
+ const {m,d}=setup();d.demoLogin('admin','demo1234');const id=m.periodOf(m.today());
+ d.commandDemo(id,{type:'saveEmployee',employee:{id:'new',name:'新人',floorIds:['f1']}});
+ const floors=d.readDemo(id).floors;
+ d.commandDemo(id,{type:'deleteEmployee',id:'new'});
+ assert.ok(!d.readDemo(id).employees.some(e=>e.id==='new'));
+ assert.deepEqual(d.readDemo(id).floors,floors);
+ assert.throws(()=>d.commandDemo(id,{type:'deleteEmployee',id:'new'}),/削除済み/);
+ const other=m.movePeriod(id,4);const before=d.readDemo(other);
+ assert.throws(()=>d.commandDemo(other,{type:'deleteEmployee',id:'e1'}),/削除できません/);
+ assert.deepEqual(d.readDemo(other),before);
+ d.demoEmployee('e1');assert.throws(()=>d.commandDemo(id,{type:'deleteEmployee',id:'e2'}),/管理者のみ/);
+});

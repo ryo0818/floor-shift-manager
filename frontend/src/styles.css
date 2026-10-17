@@ -2442,3 +2442,6 @@ textarea:focus-visible {
 
 .floor-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
 .floor-actions .text-btn { color: #b42318; }
+
+.employee-actions { display:flex; align-items:center; gap:12px; }
+.employee-actions .text-btn { color:#b42318; white-space:nowrap; }

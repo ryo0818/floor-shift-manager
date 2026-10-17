@@ -52,6 +52,7 @@ export type Command =
   | { type: "deleteShift"; id: string }
   | { type: "setStatus"; ids: string[]; status: Status }
   | { type: "setDeadline"; deadline: string }
+  | { type: "deleteEmployee"; id: string }
   | { type: "deleteFloor"; id: string }
   | { type: "saveFloor"; floor: Floor }
   | { type: "saveEmployee"; employee: Employee };
