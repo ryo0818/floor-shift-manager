@@ -634,3 +634,27 @@ def test_delete_employee_permissions_csrf_and_revision(system):
     ok(c,'saveEmployee',employee={'id':'e2','name':'変更','floorIds':[]})
     assert c.post('/api/commands',json=payload).status_code == 409
     assert any(e['id']=='e2' for e in workspace(c)['employees'])
+
+
+def test_six_character_password_create_change_reset(system):
+    app, path, c=system
+    login(c)
+    ok(c,'saveEmployee',employee={'id':'six','name':'6文字確認','floorIds':['f1']})
+    payload={'login':'six-user','employeeId':'six','password':'abc123'}
+    assert c.post('/api/accounts',json={**payload,'password':'abc12'}).status_code == 422
+    assert c.post('/api/accounts',json=payload).status_code == 200
+    with TestClient(app) as employee:
+        assert sign_in_with(employee,'six-user','abc123').status_code == 200
+        assert employee.post('/api/session/change-password',json={'currentPassword':'abc123','newPassword':'def45'}).status_code == 422
+        changed=employee.post('/api/session/change-password',json={'currentPassword':'abc123','newPassword':'def456'})
+        assert changed.status_code == 200
+        assert not changed.json()['session']['mustChangePassword']
+    assert c.post('/api/accounts/reset-password',json={'login':'six-user','password':'ghi78'}).status_code == 422
+    assert c.post('/api/accounts/reset-password',json={'login':'six-user','password':'ghi789'}).status_code == 200
+    with TestClient(app) as employee:
+        assert sign_in_with(employee,'six-user','ghi789').json()['session']['mustChangePassword']
+    with db.transaction(path,write=True) as con:
+        db.put(con,'employees',{'id':'cli-six','name':'CLI','floorIds':[]})
+        with pytest.raises(Exception, match='6〜256'):
+            auth.create_account(con,'cli-six','abc12','employee','cli-six')
+        auth.create_account(con,'cli-six','abc123','employee','cli-six')

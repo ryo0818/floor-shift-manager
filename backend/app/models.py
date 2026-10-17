@@ -116,7 +116,7 @@ Command = Annotated[
 ]
 
 
-Password = Annotated[str, Field(min_length=12, max_length=256)]
+Password = Annotated[str, Field(min_length=6, max_length=256)]
 
 class CreateAccount(StrictModel):
     login: Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]{1,128}$")]

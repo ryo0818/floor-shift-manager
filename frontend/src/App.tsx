@@ -39,6 +39,7 @@ import {
 } from "./components/ui/alert-dialog";
 import { Picker, EmptyState, CheckBox } from "./components/controls";
 import { Accounts, PasswordChange } from "./components/accounts";
+import { InlineDay } from "./components/inline-day";
 import { Timeline } from "./components/timeline";
 import { ShiftEditor, MasterEditor } from "./components/editors";
 import { api, DEMO } from "./data/api";
@@ -54,6 +55,7 @@ import {
   Workspace,
   conflicts,
   overlaps,
+  validateRow,
   dayName,
   daysOf,
   duration,
@@ -1350,17 +1352,18 @@ export default function App() {
                     (s) => s.employeeId === session.employeeId,
                   );
                   const locked = expired(data.period, clock);
-                  const openEditor = (r: Row) =>
-                    setEditor({
-                      row: r,
-                      employeeId: session.employeeId!,
-                      admin: false,
-                    });
+                  const validateInputs = () => {
+                    for (const row of rows) {
+                      try { validateRow(row, data.period, data.floors.map(f=>f.id)); }
+                      catch(e) { throw new Error(`${shortDate(row.date)}：${(e as Error).message} 未入力の行は削除してください。`); }
+                    }
+                  };
                   const saveDraft = async () => {
-                    await run(
-                      { type: "saveDraft", rows, note },
-                      "下書きを保存しました",
-                    );
+                    try {
+                      validateInputs();
+                      if (conflicts(rows).length && !window.confirm("希望時間が重複しています。このまま下書き保存しますか？")) return;
+                      await run({ type: "saveDraft", rows, note }, "下書きを保存しました");
+                    } catch(e) { setError((e as Error).message); }
                   };
                   return (
                     <>
@@ -1415,82 +1418,22 @@ export default function App() {
                       )}
                       <section className="employee-days">
                         {daysOf(data.period).map((d) => (
-                          <article className="day-card" key={d}>
-                            <div className="day-heading">
-                              <h2>
-                                {shortDate(d)}{" "}
-                                <span
-                                  className={
-                                    dayName(d) === "日" ? "sunday" : ""
-                                  }
-                                >
-                                  {dayName(d)}
-                                </span>
-                              </h2>
-                              <button
-                                className="text-btn"
-                                disabled={locked || busy || !data.floors.length}
-                                onClick={() => openEditor(newRow(d))}
-                              >
-                                <Plus size={16} />
-                                時間帯を追加
-                              </button>
-                            </div>
-                            {rows
-                              .filter((r) => r.date === d)
-                              .sort((a, b) => a.start.localeCompare(b.start))
-                              .map((r) => (
-                                <div className="request-row" key={r.id}>
-                                  <div>
-                                    <strong>
-                                      {r.start}–{r.end}
-                                    </strong>
-                                    <span>
-                                      {data.floors.find(
-                                        (f) => f.id === r.floorId,
-                                      )?.name || "割り当て外（要確認）"}
-                                    </span>
-                                    {r.note && <p>{r.note}</p>}
-                                  </div>
-                                  <div>
-                                    <button
-                                      className="icon-btn"
-                                      aria-label={`${shortDate(d)} ${r.start}の希望を編集`}
-                                      disabled={locked || busy}
-                                      onClick={() => openEditor(r)}
-                                    >
-                                      <Pencil size={16} />
-                                    </button>
-                                    <button
-                                      className="icon-btn"
-                                      aria-label={`${shortDate(d)} ${r.start}の希望を削除`}
-                                      disabled={locked || busy}
-                                      onClick={() =>
-                                        setConfirm({
-                                          title: "希望シフトを削除しますか？",
-                                          text: `${shortDate(d)} ${r.start}–${r.end}。削除後は下書き保存・再提出してください。`,
-                                          action: async () => {
-                                            if (expired(data.period))
-                                              throw new Error(
-                                                "受付が終了しています。",
-                                              );
-                                            setRows(
-                                              rows.filter((x) => x.id !== r.id),
-                                            );
-                                            setDirty(true);
-                                          },
-                                        })
-                                      }
-                                    >
-                                      <Trash2 size={16} />
-                                    </button>
-                                  </div>
-                                </div>
-                              ))}
-                            {!rows.some((r) => r.date === d) && (
-                              <p className="rest-day">休み希望</p>
-                            )}
-                          </article>
+                          <InlineDay key={d} date={d} rows={rows.filter(r=>r.date===d)}
+                            floors={data.floors} period={data.period} disabled={locked || busy}
+                            onChange={row=>{
+                              if(expired(data.period) || busy) return;
+                              setRows(current=>current.some(r=>r.id===row.id) ? current.map(r=>r.id===row.id ? row : r) : [...current,row]);
+                              setDirty(true);
+                            }}
+                            onRemove={row=>setConfirm({
+                              title:"希望の入力行を削除しますか？",
+                              text:`${shortDate(d)} ${row.start || "未入力"}〜${row.end || "未入力"}。削除後は下書き保存・再提出してください。`,
+                              action:async()=>{
+                                if(expired(data.period)) throw new Error("受付が終了しています。");
+                                setRows(current=>current.filter(r=>r.id!==row.id));setDirty(true);
+                              },
+                            })}
+                          />
                         ))}
                       </section>
                       <section className="period-note">
@@ -1534,6 +1477,7 @@ export default function App() {
                             className="btn primary"
                             disabled={locked || busy}
                             onClick={() => {
+                              try { validateInputs(); } catch(e) { setError((e as Error).message); return; }
                               const pairs = conflicts(rows);
                               setConfirm({
                                 title: s?.submittedAt

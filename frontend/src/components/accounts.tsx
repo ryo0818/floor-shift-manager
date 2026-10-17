@@ -24,8 +24,8 @@ export function PasswordChange({ forced, onDone, onCancel }: {
     <p>{forced ? "最初に仮パスワードを変更してください。" : "変更すると、他の端末のログインは解除されます。"}</p>
     <form className="edit-form" onSubmit={submit}>
       <label>現在のパスワード（初回は仮パスワード）<input type="password" autoComplete="current-password" required maxLength={256} value={current} onChange={e=>setCurrent(e.target.value)} /></label>
-      <label>新しいパスワード（12〜256文字）<input type="password" autoComplete="new-password" required minLength={12} maxLength={256} value={password} onChange={e=>setPassword(e.target.value)} /></label>
-      <label>新しいパスワード（確認）<input type="password" autoComplete="new-password" required minLength={12} maxLength={256} value={repeat} onChange={e=>setRepeat(e.target.value)} /></label>
+      <label>新しいパスワード（6〜256文字）<input type="password" autoComplete="new-password" required minLength={6} maxLength={256} value={password} onChange={e=>setPassword(e.target.value)} /></label>
+      <label>新しいパスワード（確認）<input type="password" autoComplete="new-password" required minLength={6} maxLength={256} value={repeat} onChange={e=>setRepeat(e.target.value)} /></label>
       {error && <p role="alert" className="form-error">{error}</p>}
       <button className="btn primary" disabled={busy}>変更する</button>
       <button type="button" className="btn secondary" disabled={busy} onClick={onCancel}>{forced ? "ログアウト" : "キャンセル"}</button>
@@ -70,8 +70,8 @@ export function Accounts({ employees, close }: { employees: Employee[]; close: (
       {target && <>
         {existing ? <p>ログインID：<strong>{existing.login}</strong> ／ {existing.mustChangePassword ? "本人のパスワード変更待ち" : "利用中"}</p> :
           <label>ログインID<input required pattern="[A-Za-z0-9_.\-]{1,128}" maxLength={128} autoComplete="off" value={login} disabled={busy} onChange={e=>setLogin(e.target.value)} /><small>半角英数字・ハイフン・アンダースコア・ピリオド</small></label>}
-        <label>仮パスワード（12〜256文字）<input required type="password" minLength={12} maxLength={256} autoComplete="new-password" disabled={busy} value={password} onChange={e=>setPassword(e.target.value)} /></label>
-        <label>仮パスワード（確認）<input required type="password" minLength={12} maxLength={256} autoComplete="new-password" disabled={busy} value={repeat} onChange={e=>setRepeat(e.target.value)} /></label>
+        <label>仮パスワード（6〜256文字）<input required type="password" minLength={6} maxLength={256} autoComplete="new-password" disabled={busy} value={password} onChange={e=>setPassword(e.target.value)} /></label>
+        <label>仮パスワード（確認）<input required type="password" minLength={6} maxLength={256} autoComplete="new-password" disabled={busy} value={repeat} onChange={e=>setRepeat(e.target.value)} /></label>
         <button className="btn primary" disabled={busy || !loaded}>{existing ? "パスワードをリセット" : "アカウントを作成"}</button>
       </>}
       {error && <p role="alert" className="form-error">{error}</p>}

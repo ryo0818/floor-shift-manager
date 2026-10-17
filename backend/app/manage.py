@@ -13,11 +13,11 @@ COLORS = ["#236b59", "#3269b0", "#9165b5", "#b97932", "#b75272"]
 
 
 def password():
-    first = getpass("パスワード（12文字以上）: ")
+    first = getpass("パスワード（6文字以上）: ")
     if first != getpass("パスワード（確認）: "):
         raise RuleError("パスワードが一致しません。")
-    if not 12 <= len(first) <= 256:
-        raise RuleError("パスワードは12〜256文字にしてください。")
+    if not 6 <= len(first) <= 256:
+        raise RuleError("パスワードは6〜256文字にしてください。")
     return first
 
 

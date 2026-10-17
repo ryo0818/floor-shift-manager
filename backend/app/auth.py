@@ -22,8 +22,8 @@ def create_account(con, login, password, role, employee_id=None):
         raise RuleError(
             "ログインIDは英数字・ハイフン・アンダースコア・ピリオドで指定してください。"
         )
-    if not 12 <= len(password) <= 256:
-        raise RuleError("パスワードは12〜256文字にしてください。")
+    if not 6 <= len(password) <= 256:
+        raise RuleError("パスワードは6〜256文字にしてください。")
     if role not in ("admin", "employee") or (role == "employee" and not employee_id):
         raise RuleError("アカウント種別と従業員IDを確認してください。")
     con.execute(

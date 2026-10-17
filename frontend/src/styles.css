@@ -2445,3 +2445,11 @@ textarea:focus-visible {
 
 .employee-actions { display:flex; align-items:center; gap:12px; }
 .employee-actions .text-btn { color:#b42318; white-space:nowrap; }
+
+.inline-shift { border:0; border-top:1px solid #e3eae5; margin:12px 0; padding:12px 0 0; min-width:0; }
+.inline-shift legend { padding:0 6px; font-size:12px; color:#64756b; }
+.inline-shift label { display:flex; flex-direction:column; gap:5px; font-size:12px; margin-bottom:10px; }
+.inline-shift select, .inline-shift input { width:100%; min-width:0; padding:9px; border:1px solid #ccd8d0; border-radius:6px; background:white; font:inherit; font-size:16px; color:#243f31; }
+.inline-times { display:grid; grid-template-columns:1fr auto 1fr; gap:8px; align-items:center; }
+.inline-shift :disabled { opacity:.65; }
+.inline-shift .form-error { font-size:12px; white-space:normal; }
