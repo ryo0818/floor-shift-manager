@@ -35,7 +35,20 @@ async function request<T>(
     );
   return json as T;
 }
+export type Account = { login: string; employeeId: string; mustChangePassword: boolean };
 export const api = {
+  async accounts() { return request<Account[]>("/accounts"); },
+  async createAccount(login: string, employeeId: string, password: string) {
+    return request("/accounts", "POST", { login, employeeId, password });
+  },
+  async resetPassword(login: string, password: string) {
+    return request("/accounts/reset-password", "POST", { login, password });
+  },
+  async changePassword(currentPassword: string, newPassword: string) {
+    const r = await request<{session: Session; csrfToken: string}>("/session/change-password", "POST", {currentPassword, newPassword});
+    csrf = r.csrfToken;
+    return r.session;
+  },
   async session() {
     if (demo) return (await demo).demoSession();
     if (!sessionRequest) {

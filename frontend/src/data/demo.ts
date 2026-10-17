@@ -224,6 +224,17 @@ export function commandDemo(id: string, c: Command) {
     b.period.deadline = c.deadline;
     return;
   }
+  if (c.type === "deleteFloor") {
+    if (!floors.some(f=>f.id===c.id)) throw new Error("フロアは削除済みです。再読み込みしてください。");
+    for (const bucket of buckets.values()) {
+      const rows = [...bucket.shifts, ...bucket.shifts.map(s=>s.original),
+        ...bucket.submissions.flatMap(s=>[...s.draftRows,...s.submittedRows])];
+      if (rows.some(r=>r.floorId===c.id)) throw new Error("このフロアは希望・下書き・シフト・元の希望で使用中のため削除できません（全期間）。");
+    }
+    floors = floors.filter(f=>f.id!==c.id);
+    employees = employees.map(e=>({...e,floorIds:e.floorIds.filter(f=>f!==c.id)}));
+    return;
+  }
   if (c.type === "saveFloor") {
     const f = c.floor;
     if (!f.name.trim() || f.name.length > 50 || !/^#[\da-f]{6}$/i.test(f.color))

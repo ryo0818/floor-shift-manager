@@ -38,6 +38,7 @@ import {
   AlertDialogAction,
 } from "./components/ui/alert-dialog";
 import { Picker, EmptyState, CheckBox } from "./components/controls";
+import { Accounts, PasswordChange } from "./components/accounts";
 import { Timeline } from "./components/timeline";
 import { ShiftEditor, MasterEditor } from "./components/editors";
 import { api, DEMO } from "./data/api";
@@ -52,6 +53,7 @@ import {
   Submission,
   Workspace,
   conflicts,
+  overlaps,
   dayName,
   daysOf,
   duration,
@@ -266,6 +268,8 @@ export default function App() {
     [timelineDate, setTimelineDate] = useState(""),
     [boardMode, setBoardMode] = useState("list"),
     [clock, setClock] = useState(Date.now());
+  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
   const sequence = useRef(0);
   useEffect(() => {
     api
@@ -277,7 +281,7 @@ export default function App() {
     return () => clearInterval(t);
   }, []);
   const load = useCallback(async () => {
-    if (!session) return;
+    if (!session || session.mustChangePassword) return;
     const seq = ++sequence.current;
     setLoading(true);
     setError("");
@@ -397,6 +401,11 @@ export default function App() {
     });
   if (boot)
     return <div className="page-loading">ログイン状態を確認しています…</div>;
+  if (session && (session.mustChangePassword || passwordOpen)) return <PasswordChange
+    forced={!!session.mustChangePassword}
+    onDone={s=>{setPasswordOpen(false);setSession(s);}}
+    onCancel={()=>{ if (!session.mustChangePassword) setPasswordOpen(false); else safe(async()=>{await api.logout();setSession(null);setData(null);}); }}
+  />;
   return (
     <>
       <Toaster richColors position="top-center" />
@@ -419,6 +428,7 @@ export default function App() {
           <header className="header">
             <Brand />
             <div className="header-right">
+              {!DEMO && <button className="btn secondary" disabled={busy} onClick={()=>guard(()=>setPasswordOpen(true))}>パスワード変更</button>}
               <span className="role-label">
                 {session.role === "admin" ? "管理者" : session.name}
               </span>
@@ -807,6 +817,11 @@ export default function App() {
                                   admin: true,
                                 })
                               }
+                              onMove={async (s) => {
+                                const overlap = data.shifts.filter(x=>x.id!==s.id && x.employeeId===s.employeeId && x.status!=="declined" && overlaps(x,s));
+                                if (overlap.length && !window.confirm("同じ従業員のシフトと時間が重なります。このまま保存しますか？")) return;
+                                await run({type: "saveShift", shift: s, acknowledgeOverlap: overlap.length > 0}, "勤務時間を変更しました");
+                              }}
                               onStatus={requestStatus}
                             />
                           ) : !visible.length ? (
@@ -1210,6 +1225,7 @@ export default function App() {
                 )}
                 {tab === "members" && (
                   <div className="masters">
+                    {!DEMO && <button className="btn primary" onClick={()=>setAccountsOpen(true)}>ログインアカウント管理</button>}
                     <section className="board floor-master">
                       <div className="board-top">
                         <h2>
@@ -1232,6 +1248,16 @@ export default function App() {
                             />
                             {f.name}
                           </span>
+                          <div className="floor-actions">
+                          <button className="text-btn" disabled={busy}
+                            aria-label={`${f.name}を削除`}
+                            onClick={()=>setConfirm({
+                              title: `「${f.name}」を削除しますか？`,
+                              text: `このフロアの従業員への割り当て（${data.employees.filter(e=>e.floorIds.includes(f.id)).length}人）も解除します。割り当てがなくなった従業員は希望を追加できません。希望・下書き・勤務シフト・元の希望で使用中の場合は、全期間を確認して削除を中止します。削除は元に戻せません。`,
+                              action: async()=>{await run({type:"deleteFloor",id:f.id},"フロアを削除しました");if(floor===f.id)setFloor("all");},
+                            })}>
+                            <Trash2 size={16}/>削除
+                          </button>
                           <button
                             className="icon-btn"
                             aria-label={`${f.name}を編集`}
@@ -1241,6 +1267,7 @@ export default function App() {
                           >
                             <Pencil size={16} />
                           </button>
+                          </div>
                         </div>
                       ))}
                     </section>
@@ -1582,6 +1609,7 @@ export default function App() {
           }}
         />
       )}
+      {accountsOpen && data && session?.role === "admin" && <Accounts employees={data.employees} close={()=>setAccountsOpen(false)} />}
       {master && data && (
         <MasterEditor
           {...master}

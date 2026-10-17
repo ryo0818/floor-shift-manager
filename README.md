@@ -1,3 +1,12 @@
+# 2026-10-12 フロア削除対応
+
+管理者の「従業員・フロア」に削除ボタンを追加しました。[更新手順と削除条件](docs/FLOOR-DELETE-UPDATE.md) を参照してください。
+
+# 2026-10-07 機能追加
+
+画面からのアカウント作成・管理者パスワードリセット・本人のパスワード変更・タイムラインのドラッグ調整を追加しました。
+既存DBにカラム追加が必要です。**[更新手順](docs/ACCOUNT-AND-DRAG-UPDATE.md)** に従って `python -m app.manage migrate` を実行してください。
+
 # フロアシフト — React + Python + PostgreSQL
 
 管理者によるシフト調整・確定と、従業員の希望提出を行うアプリです。今回のバックエンドは **Python / FastAPI**、DBは **PostgreSQL** です。Java / Spring Bootは使用しません。

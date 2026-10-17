@@ -1,0 +1,26 @@
+# Local configuration and secrets
+.env
+.env.local
+.env.*.local
+
+# Generated dependencies and builds
+node_modules/
+dist/
+build/
+*.tsbuildinfo
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.log
+
+# Editors and OS files
+.idea/
+.vscode/
+.classpath
+.project
+.settings/
+.DS_Store
+Thumbs.db

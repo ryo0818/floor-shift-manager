@@ -84,6 +84,11 @@ class SaveFloor(CommandBase):
     floor: Floor
 
 
+class DeleteFloor(CommandBase):
+    type: Literal["deleteFloor"]
+    id: Id
+
+
 class SaveEmployee(CommandBase):
     type: Literal["saveEmployee"]
     employee: Employee
@@ -98,7 +103,24 @@ Command = Annotated[
         SetStatus,
         SetDeadline,
         SaveFloor,
+        DeleteFloor,
         SaveEmployee,
     ],
     Field(discriminator="type"),
 ]
+
+
+Password = Annotated[str, Field(min_length=12, max_length=256)]
+
+class CreateAccount(StrictModel):
+    login: Annotated[str, Field(pattern=r"^[A-Za-z0-9_.-]{1,128}$")]
+    employeeId: Id
+    password: Password
+
+class ResetPassword(StrictModel):
+    login: Annotated[str, Field(min_length=1, max_length=128)]
+    password: Password
+
+class ChangePassword(StrictModel):
+    currentPassword: Annotated[str, Field(min_length=1, max_length=256)]
+    newPassword: Password

@@ -8,6 +8,7 @@ import {
   type Shift,
   type Status,
 } from "../domain/model";
+import { DragBar } from "./drag-bar";
 import { Modal } from "./controls";
 
 export function Timeline({
@@ -20,6 +21,7 @@ export function Timeline({
   canConfirm,
   onEdit,
   onStatus,
+  onMove,
 }: {
   data: Workspace;
   visible: Shift[];
@@ -29,6 +31,7 @@ export function Timeline({
   busy: boolean;
   canConfirm: boolean;
   onEdit: (s: Shift) => void;
+  onMove: (s: Shift) => Promise<void>;
   onStatus: (ids: string[], status: Status) => void;
 }) {
   const [detail, setDetail] = useState<string | null>(null);
@@ -71,7 +74,7 @@ export function Timeline({
         </button>
       </div>
       <p className="timeline-hint">
-        横棒をクリックして時間調整・確定。人数は検索・状態の絞り込みに関係なく、当日・当該フロアの全シフトから集計します。時間帯の人数は15分単位です。
+        未確定の横棒をドラッグして時間移動、両端をドラッグして開始・終了を変更（15分単位）。クリックでも時間・フロア調整と確定ができます。人数は検索・状態の絞り込みに関係なく、当日・当該フロアの全シフトから集計します。時間帯の人数は15分単位です。
       </p>
       <div className="timeline-legend">
         <span className="status pending">未確定</span>
@@ -89,18 +92,7 @@ export function Timeline({
           const shown = visible.filter(
             (s) => s.date === day && s.floorId === f.id,
           );
-          const basis = all.length ? all : [];
-          const from = basis.length
-            ? Math.floor(Math.min(...basis.map((s) => minutes(s.start))) / 60) *
-              60
-            : 480;
-          const to = basis.length
-            ? Math.min(
-                1440,
-                Math.ceil(Math.max(...basis.map((s) => minutes(s.end))) / 60) *
-                  60,
-              )
-            : 1320;
+          const from = 0, to = 1440;
           const span = Math.max(60, to - from),
             slots = Array.from({ length: span / 15 }, (_, i) => from + i * 15);
           const hours = Array.from(
@@ -198,23 +190,8 @@ export function Timeline({
                             }}
                           >
                             {shifts.map((s, i) => (
-                              <button
-                                key={s.id}
-                                disabled={busy}
-                                className={`timeline-bar ${s.status}`}
-                                style={{
-                                  left: `${((minutes(s.start) - from) / span) * 100}%`,
-                                  width: `${((minutes(s.end) - minutes(s.start)) / span) * 100}%`,
-                                  top: i * 40 + 6,
-                                }}
-                                onClick={() => setDetail(s.id)}
-                                aria-label={`${e.name} ${s.start}〜${s.end} ${statusNames[s.status]} 詳細と操作`}
-                                title={`${s.start}〜${s.end} ${statusNames[s.status]}`}
-                              >
-                                <span>
-                                  {s.start}–{s.end} · {statusNames[s.status]}
-                                </span>
-                              </button>
+                              <DragBar key={s.id} shift={s} index={i} from={from} span={span} busy={busy}
+                                name={e.name} onDetail={()=>setDetail(s.id)} onMove={onMove} />
                             ))}
                           </div>
                         </div>

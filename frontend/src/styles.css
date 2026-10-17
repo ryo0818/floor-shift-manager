@@ -2428,3 +2428,17 @@ textarea:focus-visible {
     padding: 12px;
   }
 }
+
+/* Account controls and 15-minute timeline editing. */
+.password-panel { margin: 48px auto; max-width: 520px; width: calc(100% - 32px); }
+.timeline-bar.pending { cursor: grab; padding-left: 18px; padding-right: 18px; user-select: none; }
+.timeline-bar.dragging { cursor: grabbing; z-index: 5; box-shadow: 0 0 0 2px #315ee7; }
+.timeline-bar .drag-handle { position: absolute; top: 0; bottom: 0; width: 16px; display: flex; align-items: center; justify-content: center; cursor: ew-resize; background: #00000012; }
+.drag-handle.start { left: 0; }
+.drag-handle.end { right: 0; }
+.drag-error { display: block; color: #b42318; position: sticky; left: 0; background: white; z-index: 6; }
+
+.masters > .btn { grid-column: 1 / -1; justify-self: start; }
+
+.floor-actions { display: flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.floor-actions .text-btn { color: #b42318; }

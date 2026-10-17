@@ -29,3 +29,6 @@ CREATE TABLE IF NOT EXISTS login_attempts (
     count integer NOT NULL,
     expires double precision NOT NULL
 );
+
+-- Additive migration: existing accounts keep their current passwords.
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;

@@ -41,6 +41,7 @@ Reactの `src/domain/model.ts` のWorkspaceに、全体の更新番号 `revision
 | setStatus | ids、status | 管理者 |
 | setDeadline | deadline | 管理者 |
 | saveFloor | floor | 管理者 |
+| deleteFloor | id | 管理者。全期間の使用確認後に削除・割り当て解除 |
 | saveEmployee | employee | 管理者 |
 
 - rows：id、date、start、end、floorId、note
@@ -64,4 +65,4 @@ Reactの `src/domain/model.ts` のWorkspaceに、全体の更新番号 `revision
 
 ## 現在の境界
 
-従業員の公開アカウント登録、メール再発行、完全な監査ログ、確定シフトの従業員公開は未実装。約50人の初期運用を想定し、書き込みは直列化しています。高負荷・大量データ向けに最適化したDBスキーマではありません。
+本人による公開アカウント登録、メール再発行、完全な監査ログ、確定シフトの従業員公開は未実装。管理者のアカウント作成・リセットと本人のパスワード変更は実装済み（[追加API](ACCOUNT-AND-DRAG-UPDATE.md)）。約50人の初期運用を想定し、書き込みは直列化しています。高負荷・大量データ向けに最適化したDBスキーマではありません。

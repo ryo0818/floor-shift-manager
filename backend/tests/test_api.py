@@ -453,3 +453,127 @@ def test_client_row_id_cannot_overwrite_another_employee(system):
         saved = workspace(c)["shifts"]
         assert len(saved) == 2 and len({s["id"] for s in saved}) == 2
         assert {s["employeeId"] for s in saved} == {"e1", "e2"}
+
+
+def sign_in_with(client, who, password):
+    csrf = client.get('/api/session').json()['csrfToken']
+    r = client.post('/api/session/login', json={'id': who, 'password': password}, headers={'X-CSRF-TOKEN': csrf})
+    if r.status_code == 200:
+        client.headers['X-CSRF-TOKEN'] = r.json()['csrfToken']
+    return r
+
+
+def test_account_create_force_change_and_permissions(system):
+    app, path, admin = system
+    login(admin)
+    ok(admin, 'saveEmployee', employee={'id':'e3','name':'新人','floorIds':['f1']})
+    payload = {'login':'new.employee','employeeId':'e3','password':'temporary-password-123'}
+    assert admin.post('/api/accounts', json=payload, headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
+    assert admin.post('/api/accounts', json={**payload,'password':'short'}).status_code == 422
+    assert admin.post('/api/accounts', json={**payload,'employeeId':'missing'}).status_code == 404
+    assert admin.post('/api/accounts', json=payload).status_code == 200
+    assert admin.post('/api/accounts', json=payload).status_code == 409
+    listed = admin.get('/api/accounts').json()
+    assert any(a['login']=='new.employee' and a['mustChangePassword'] for a in listed)
+    assert 'password_hash' not in str(listed) and payload['password'] not in str(listed)
+    with TestClient(app) as e:
+        result = sign_in_with(e, payload['login'], payload['password'])
+        assert result.json()['session']['mustChangePassword'] is True
+        assert e.get('/api/workspace', params={'period':PERIOD}).status_code == 403
+        assert e.get('/api/accounts').status_code == 403
+        r = e.post('/api/session/change-password', json={'currentPassword':payload['password'], 'newPassword':'personal-password-123'})
+        assert r.status_code == 200 and r.json()['session']['mustChangePassword'] is False
+        e.headers['X-CSRF-TOKEN'] = r.json()['csrfToken']
+        workspace(e)
+        assert e.post('/api/accounts', json=payload).status_code == 403
+        assert e.post('/api/accounts/reset-password', json={'login':'employee2','password':'temporary-password-456'}).status_code == 403
+    db.initialize(path)  # Re-running additive migration must preserve passwords/data.
+    with TestClient(app) as e:
+        assert sign_in_with(e, payload['login'], 'personal-password-123').status_code == 200
+
+
+def test_admin_reset_revokes_sessions_and_requires_change(system):
+    app, _, admin = system
+    login(admin)
+    with TestClient(app) as e, TestClient(app) as other:
+        login(e, 'employee1'); login(other, 'employee1')
+        payload = {'login':'employee1','password':'reset-temporary-123'}
+        assert admin.post('/api/accounts/reset-password', json={**payload,'login':'admin'}).status_code == 404
+        assert admin.post('/api/accounts/reset-password', json=payload, headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
+        assert admin.post('/api/accounts/reset-password', json=payload).status_code == 200
+        assert e.get('/api/workspace', params={'period':PERIOD}).status_code == 401
+        assert other.get('/api/workspace', params={'period':PERIOD}).status_code == 401
+        assert sign_in_with(e, 'employee1', PASSWORD).status_code == 401
+        assert sign_in_with(e, 'employee1', payload['password']).json()['session']['mustChangePassword']
+        assert e.post('/api/commands', json={'period':PERIOD,'type':'saveDraft','expectedRevision':0,'rows':[]}).status_code == 403
+        same = {'currentPassword':payload['password'],'newPassword':payload['password']}
+        assert e.post('/api/session/change-password', json=same).status_code == 400
+        assert e.post('/api/session/logout', json={}).status_code == 200
+
+
+def test_password_change_current_password_csrf_and_rotation(system):
+    app, _, c = system
+    login(c)
+    with TestClient(app) as second:
+        login(second)
+        old = c.cookies.get(auth.COOKIE)
+        payload = {'currentPassword':PASSWORD, 'newPassword':'new-personal-password-123'}
+        assert c.post('/api/session/change-password', json=payload, headers={'X-CSRF-TOKEN':'wrong'}).status_code == 403
+        assert c.post('/api/session/change-password', json={**payload,'currentPassword':'wrong'}).status_code == 400
+        result=c.post('/api/session/change-password', json=payload)
+        assert result.status_code == 200 and c.cookies.get(auth.COOKIE) != old
+        c.headers['X-CSRF-TOKEN'] = result.json()['csrfToken']
+        workspace(c)
+        assert second.get('/api/workspace', params={'period':PERIOD}).status_code == 401
+        assert sign_in_with(second, 'admin', PASSWORD).status_code == 401
+        assert sign_in_with(second, 'admin', payload['newPassword']).status_code == 200
+
+
+def test_delete_floor_removes_assignments_and_persists(system):
+    app, path, c = system
+    login(c)
+    before = workspace(c)
+    ok(c, 'deleteFloor', id='f1')
+    after = workspace(c)
+    assert after['revision'] > before['revision']
+    assert not any(f['id']=='f1' for f in after['floors'])
+    assert all('f1' not in e['floorIds'] for e in after['employees'])
+    assert next(e for e in after['employees'] if e['id']=='e2')['floorIds'] == []
+    with db.transaction(path) as con:
+        assert con.execute('SELECT 1 FROM floors WHERE id=%s', ('f1',)).fetchone() is None
+    with TestClient(create_app(path)) as restart:
+        login(restart)
+        assert workspace(restart)['floors'] == after['floors']
+    assert command(c, 'deleteFloor', id='f1').status_code == 409
+
+
+@pytest.mark.parametrize('reference', ['draftRows', 'submittedRows', 'shift', 'original'])
+def test_delete_floor_checks_other_period_and_preserves_state(system, reference):
+    _, path, c = system
+    login(c)
+    with db.transaction(path, write=True) as con:
+        state = db.load(con, '2030-03-01')
+        r = row(date='2030-03-03')
+        if reference in ('draftRows', 'submittedRows'):
+            state['submissions'] = [{'employeeId':'e1', reference:[r]}]
+        else:
+            state['shifts'] = [{**r, 'employeeId':'e1', 'status':'declined',
+                               'floorId':'f2' if reference=='original' else 'f1', 'original':r}]
+        db.save(con, state)
+    before = workspace(c)
+    result = command(c, 'deleteFloor', id='f1')
+    assert result.status_code == 409 and '使用中' in result.json()['message']
+    assert workspace(c) == before
+
+
+def test_delete_floor_permissions_csrf_and_stale_revision(system):
+    app, _, c = system
+    login(c)
+    payload={'type':'deleteFloor','id':'f5','period':PERIOD,'expectedRevision':workspace(c)['revision']}
+    assert c.post('/api/commands',json=payload,headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
+    with TestClient(app) as e:
+        login(e,'employee1')
+        assert command(e,'deleteFloor',id='f5').status_code == 403
+    ok(c,'saveEmployee',employee={'id':'e3','name':'新規','floorIds':['f5']})
+    assert c.post('/api/commands',json=payload).status_code == 409
+    assert any(f['id']=='f5' for f in workspace(c)['floors'])

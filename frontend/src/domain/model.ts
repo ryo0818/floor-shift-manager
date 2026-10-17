@@ -4,6 +4,7 @@ export type Session = {
   name: string;
   employeeId?: string;
   csrfToken?: string;
+  mustChangePassword?: boolean;
 };
 export type Floor = { id: string; name: string; color: string };
 export type Employee = { id: string; name: string; floorIds: string[] };
@@ -51,6 +52,7 @@ export type Command =
   | { type: "deleteShift"; id: string }
   | { type: "setStatus"; ids: string[]; status: Status }
   | { type: "setDeadline"; deadline: string }
+  | { type: "deleteFloor"; id: string }
   | { type: "saveFloor"; floor: Floor }
   | { type: "saveEmployee"; employee: Employee };
 export const statusNames: Record<Status, string> = {

@@ -153,6 +153,8 @@ def main():
                     (auth.HASHER.hash(secret), args.login),
                 )
                 con.execute("DELETE FROM sessions WHERE login=%s", (args.login,))
+            if args.command != "init":
+                con.execute("UPDATE accounts SET must_change_password=true WHERE login=%s", (args.login,))
             con.execute("UPDATE metadata SET revision=revision+1 WHERE id=1")
         print("完了しました。")
     except (RuleError, psycopg.IntegrityError) as exc:

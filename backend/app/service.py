@@ -264,3 +264,24 @@ def apply(state, user, c, now=None):
             s["status"] = status
     else:
         raise RuleError("未対応の操作です。")
+
+
+def delete_floor(state, user, floor_id, all_periods):
+    """Check every saved period, including private drafts and original requests."""
+    if user["role"] != "admin":
+        raise RuleError("管理者のみ操作できます。", 403)
+    if not any(f["id"] == floor_id for f in state["floors"]):
+        raise RuleError("フロアは削除済みです。再読み込みしてください。", 409)
+    for bucket in all_periods:
+        rows = []
+        for shift in bucket.get("shifts", []):
+            rows.append(shift)
+            rows.append(shift.get("original") or {})
+        for submission in bucket.get("submissions", []):
+            rows.extend(submission.get("draftRows", []))
+            rows.extend(submission.get("submittedRows", []))
+        if any(row.get("floorId") == floor_id for row in rows):
+            raise RuleError("このフロアは希望シフト・下書き・勤務シフト・元の希望のいずれかで使用中のため削除できません。過去・未来を含む全期間が対象です。", 409)
+    state["floors"] = [f for f in state["floors"] if f["id"] != floor_id]
+    for employee in state["employees"]:
+        employee["floorIds"] = [f for f in employee["floorIds"] if f != floor_id]

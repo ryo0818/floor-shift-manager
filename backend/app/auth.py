@@ -75,13 +75,13 @@ def session_user(con, session):
     if session is None or not session["login"]:
         return None
     account = con.execute(
-        "SELECT login,role,employee_id FROM accounts WHERE login=%s",
+        "SELECT login,role,employee_id,must_change_password FROM accounts WHERE login=%s",
         (session["login"],),
     ).fetchone()
     if account is None:
         return None
     if account["role"] == "admin":
-        return {"role": "admin", "name": "管理者"}
+        return {"role": "admin", "name": "管理者", "mustChangePassword": account["must_change_password"]}
     import json
 
     row = con.execute(
@@ -90,10 +90,10 @@ def session_user(con, session):
     if not row:
         return None
     employee = row["data"]
-    return {"role": "employee", "name": employee["name"], "employeeId": employee["id"]}
+    return {"role": "employee", "name": employee["name"], "employeeId": employee["id"], "mustChangePassword": account["must_change_password"]}
 
 
-def require_session(con, request, *, csrf=False, authenticated=True):
+def require_session(con, request, *, csrf=False, authenticated=True, allow_password_change=False):
     session = find_session(con, request.cookies.get(COOKIE))
     if session is None:
         raise RuleError("ログイン画面を再読み込みしてください。", 401)
@@ -104,6 +104,8 @@ def require_session(con, request, *, csrf=False, authenticated=True):
     user = session_user(con, session)
     if authenticated and user is None:
         raise RuleError("ログインしてください。", 401)
+    if authenticated and user and user.get("mustChangePassword") and not allow_password_change:
+        raise RuleError("先にパスワードを変更してください。", 403)
     return session, user
 
 
