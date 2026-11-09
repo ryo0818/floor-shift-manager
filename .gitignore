@@ -24,3 +24,10 @@ __pycache__/
 .settings/
 .DS_Store
 Thumbs.db
+
+*.pem
+# Certbot certificates and account keys
+/nginx-vps/certbot/conf/
+
+# Certbot certificates and account keys
+/nginx-vps/certbot/conf/
