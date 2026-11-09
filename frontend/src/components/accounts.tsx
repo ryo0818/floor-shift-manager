@@ -33,49 +33,73 @@ export function PasswordChange({ forced, onDone, onCancel }: {
   </section>;
 }
 
-export function Accounts({ employees, close }: { employees: Employee[]; close: () => void }) {
+export function Accounts({ employees, initialEmployeeId, close }: {
+  employees: Employee[]; initialEmployeeId?: string; close: () => void;
+}) {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [target, setTarget] = useState("");
-  const [login, setLogin] = useState("");
-  const [password, setPassword] = useState("");
-  const [repeat, setRepeat] = useState("");
+  const [target, setTarget] = useState(initialEmployeeId ?? "");
+  const [initialPassword, setInitialPassword] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const existing = accounts.find(a=>a.employeeId===target);
+  const existing = accounts.find(a => a.employeeId === target);
   const reload = async () => { setAccounts(await api.accounts()); setLoaded(true); };
-  useEffect(()=>{ void reload().catch(e=>setError(e.message)); }, []);
-  async function submit(e: FormEvent) {
-    e.preventDefault(); if (busy || !loaded) return;
-    setError(""); setMessage("");
-    if (password !== repeat) { setError("仮パスワードが一致しません。"); return; }
-    if (existing && !window.confirm(`${existing.login} のパスワードをリセットします。ログイン中の端末もすべてログアウトします。よろしいですか？`)) return;
-    setBusy(true);
+  useEffect(() => { void reload().catch(e => setError(e.message)); }, []);
+
+  async function issue() {
+    if (busy || !target || !loaded) return;
+    if (existing && !window.confirm(`${existing.login} のパスワードを再発行します。ログイン中の端末はすべてログアウトします。よろしいですか？`)) return;
+    setBusy(true); setError(""); setMessage(""); setInitialPassword("");
     try {
-      if (existing) await api.resetPassword(existing.login, password);
-      else await api.createAccount(login, target, password);
-      setPassword(""); setRepeat("");
-      setMessage("設定しました。入力した仮パスワードを本人に伝えてください。本人は次回ログイン時に変更します。");
+      if (existing) await api.resetPassword(existing.login);
+      else await api.createAccount(target);
+      setMessage("発行しました。初期パスワードを表示して、ログインIDと一緒に本人に伝えてください。");
       await reload();
-    } catch(e) { setError((e as Error).message); }
+    } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
-  return <Modal title="ログインアカウント管理" description="従業員のアカウント作成・パスワードリセット" close={()=>{if(!busy) close();}}>
-    <form className="edit-form" onSubmit={submit}>
-      <label>従業員<select required disabled={busy || !loaded} value={target} onChange={e=>{setTarget(e.target.value);setLogin("");setPassword("");setRepeat("");setMessage("");setError("");}}>
+
+  async function reveal(login: string) {
+    setBusy(true); setError(""); setMessage("");
+    try { setInitialPassword((await api.initialPassword(login)).initialPassword); }
+    catch (e) { setError((e as Error).message); }
+    finally { setBusy(false); }
+  }
+
+  async function copy(value: string, label: string) {
+    setError(""); setMessage("");
+    try {
+      await navigator.clipboard.writeText(value);
+      setMessage(`${label}をコピーしました。`);
+    } catch {
+      setError("コピーできませんでした。入力欄の文字を選択してコピーしてください。");
+    }
+  }
+
+  return <Modal title="ログインアカウント管理" description="ログインIDと初期パスワードを確認できます。本人が変更すると初期パスワードは表示されなくなります。" close={() => { if (!busy) close(); }}>
+    <div className="edit-form">
+      <label>従業員<select disabled={busy || !loaded} value={target} onChange={e => {
+        setTarget(e.target.value); setInitialPassword(""); setMessage(""); setError("");
+      }}>
         <option value="">選択してください</option>
-        {employees.map(e=><option key={e.id} value={e.id}>{e.name}（{accounts.some(a=>a.employeeId===e.id) ? "登録済み" : "未登録"}）</option>)}
+        {employees.map(e => <option key={e.id} value={e.id}>{e.name}（{accounts.some(a => a.employeeId === e.id) ? "発行済み" : "未発行"}）</option>)}
       </select></label>
-      {target && <>
-        {existing ? <p>ログインID：<strong>{existing.login}</strong> ／ {existing.mustChangePassword ? "本人のパスワード変更待ち" : "利用中"}</p> :
-          <label>ログインID<input required pattern="[A-Za-z0-9_.\-]{1,128}" maxLength={128} autoComplete="off" value={login} disabled={busy} onChange={e=>setLogin(e.target.value)} /><small>半角英数字・ハイフン・アンダースコア・ピリオド</small></label>}
-        <label>仮パスワード（6〜256文字）<input required type="password" minLength={6} maxLength={256} autoComplete="new-password" disabled={busy} value={password} onChange={e=>setPassword(e.target.value)} /></label>
-        <label>仮パスワード（確認）<input required type="password" minLength={6} maxLength={256} autoComplete="new-password" disabled={busy} value={repeat} onChange={e=>setRepeat(e.target.value)} /></label>
-        <button className="btn primary" disabled={busy || !loaded}>{existing ? "パスワードをリセット" : "アカウントを作成"}</button>
+      {target && loaded && <>
+        {existing ? <>
+          <label>ログインID<input readOnly value={existing.login} onFocus={e => e.target.select()} /></label>
+          <button type="button" className="btn secondary" disabled={busy} onClick={() => void copy(existing.login, "ログインID")}>IDをコピー</button>
+          <p>{existing.mustChangePassword ? "本人のパスワード変更待ち" : "利用中"}</p>
+          {existing.hasInitialPassword && (initialPassword ? <>
+            <label>初期パスワード<input readOnly value={initialPassword} onFocus={e => e.target.select()} /></label>
+            <button type="button" className="btn secondary" disabled={busy} onClick={() => void copy(initialPassword, "初期パスワード")}>初期パスワードをコピー</button>
+            <button type="button" className="btn secondary" onClick={() => setInitialPassword("")}>初期パスワードを隠す</button>
+          </> : <button type="button" className="btn secondary" disabled={busy} onClick={() => void reveal(existing.login)}>初期パスワードを表示</button>)}
+          <button type="button" className="btn secondary" disabled={busy} onClick={() => void issue()}>パスワードを再発行</button>
+        </> : <button type="button" className="btn primary" disabled={busy} onClick={() => void issue()}>アカウントを発行</button>}
       </>}
       {error && <p role="alert" className="form-error">{error}</p>}
       {message && <p role="status">{message}</p>}
-    </form>
+    </div>
   </Modal>;
 }

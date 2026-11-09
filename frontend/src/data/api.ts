@@ -35,14 +35,17 @@ async function request<T>(
     );
   return json as T;
 }
-export type Account = { login: string; employeeId: string; mustChangePassword: boolean };
+export type Account = { login: string; employeeId: string; mustChangePassword: boolean; hasInitialPassword: boolean };
 export const api = {
   async accounts() { return request<Account[]>("/accounts"); },
-  async createAccount(login: string, employeeId: string, password: string) {
-    return request("/accounts", "POST", { login, employeeId, password });
+  async createAccount(employeeId: string) {
+    return request("/accounts", "POST", { employeeId });
   },
-  async resetPassword(login: string, password: string) {
-    return request("/accounts/reset-password", "POST", { login, password });
+  async resetPassword(login: string) {
+    return request("/accounts/reset-password", "POST", { login });
+  },
+  async initialPassword(login: string) {
+    return request<{ initialPassword: string }>(`/accounts/initial-password?login=${encodeURIComponent(login)}`);
   },
   async changePassword(currentPassword: string, newPassword: string) {
     const r = await request<{session: Session; csrfToken: string}>("/session/change-password", "POST", {currentPassword, newPassword});

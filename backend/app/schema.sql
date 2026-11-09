@@ -32,3 +32,4 @@ CREATE TABLE IF NOT EXISTS login_attempts (
 
 -- Additive migration: existing accounts keep their current passwords.
 ALTER TABLE accounts ADD COLUMN IF NOT EXISTS must_change_password boolean NOT NULL DEFAULT false;
+ALTER TABLE accounts ADD COLUMN IF NOT EXISTS initial_password_ciphertext text;
