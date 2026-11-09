@@ -270,7 +270,7 @@ export default function App() {
     [timelineDate, setTimelineDate] = useState(""),
     [boardMode, setBoardMode] = useState("list"),
     [clock, setClock] = useState(Date.now());
-  const [accountsOpen, setAccountsOpen] = useState(false);
+  const [accountsTarget, setAccountsTarget] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const sequence = useRef(0);
   useEffect(() => {
@@ -1227,7 +1227,7 @@ export default function App() {
                 )}
                 {tab === "members" && (
                   <div className="masters">
-                    {!DEMO && <button className="btn primary" onClick={()=>setAccountsOpen(true)}>ログインアカウント管理</button>}
+                    {!DEMO && <button className="btn primary" onClick={()=>setAccountsTarget("")}>ログインアカウント管理</button>}
                     <section className="board floor-master">
                       <div className="board-top">
                         <h2>
@@ -1564,7 +1564,7 @@ export default function App() {
           }}
         />
       )}
-      {accountsOpen && data && session?.role === "admin" && <Accounts employees={data.employees} close={()=>setAccountsOpen(false)} />}
+      {accountsTarget !== null && data && session?.role === "admin" && <Accounts employees={data.employees} initialEmployeeId={accountsTarget} close={()=>setAccountsTarget(null)} />}
       {master && data && (
         <MasterEditor
           {...master}
@@ -1572,12 +1572,14 @@ export default function App() {
           busy={busy}
           onClose={() => setMaster(null)}
           onSave={async (value) => {
+            const isNewEmployee = master.kind === "employee" && !data.employees.some(e => e.id === value.id);
             await run(
               master.kind === "floor"
                 ? { type: "saveFloor", floor: value as Floor }
                 : { type: "saveEmployee", employee: value as Employee },
             );
             setMaster(null);
+            if (!DEMO && isNewEmployee) setAccountsTarget(value.id);
           }}
         />
       )}

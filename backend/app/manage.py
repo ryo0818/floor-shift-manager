@@ -4,6 +4,7 @@ import argparse
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 from getpass import getpass
+from cryptography.fernet import Fernet
 import json
 import psycopg
 from . import auth, db
@@ -116,7 +117,11 @@ def main():
     reset.add_argument("--login", required=True)
     sub.add_parser("list-employees")
     sub.add_parser("migrate")
+    sub.add_parser("generate-credential-key")
     args = parser.parse_args()
+    if args.command == "generate-credential-key":
+        print("SHIFT_CREDENTIAL_KEY=" + Fernet.generate_key().decode())
+        return
     path = db.database_url()
     db.initialize(path)
     try:
@@ -149,7 +154,7 @@ def main():
                 ).fetchone():
                     raise RuleError("ログインIDが見つかりません。")
                 con.execute(
-                    "UPDATE accounts SET password_hash=%s WHERE login=%s",
+                    "UPDATE accounts SET password_hash=%s,initial_password_ciphertext=NULL WHERE login=%s",
                     (auth.HASHER.hash(secret), args.login),
                 )
                 con.execute("DELETE FROM sessions WHERE login=%s", (args.login,))

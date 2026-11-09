@@ -8,6 +8,7 @@ from psycopg import sql
 from psycopg.conninfo import make_conninfo
 import pytest
 from fastapi.testclient import TestClient
+from cryptography.fernet import Fernet
 from app.main import create_app
 from app import auth, db
 from app.manage import seed
@@ -18,6 +19,7 @@ PASSWORD = "test-password-12345"
 
 @pytest.fixture
 def system(monkeypatch, request):
+    monkeypatch.setenv("SHIFT_CREDENTIAL_KEY", Fernet.generate_key().decode())
     url = os.getenv("TEST_DATABASE_URL")
     if not url:
         pytest.skip(
@@ -463,52 +465,122 @@ def sign_in_with(client, who, password):
     return r
 
 
-def test_account_create_force_change_and_permissions(system):
+def employee_account(admin, employee_id):
+    response = admin.get("/api/accounts")
+    assert response.status_code == 200
+    return next(a for a in response.json() if a["employeeId"] == employee_id)
+
+
+def initial_password_url(login):
+    return f"/api/accounts/initial-password?login={login}"
+
+
+def test_registration_auto_issues_credentials_and_forces_change(system):
     app, path, admin = system
     login(admin)
-    ok(admin, 'saveEmployee', employee={'id':'e3','name':'新人','floorIds':['f1']})
-    payload = {'login':'new.employee','employeeId':'e3','password':'temporary-password-123'}
-    assert admin.post('/api/accounts', json=payload, headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
-    assert admin.post('/api/accounts', json={**payload,'password':'short'}).status_code == 422
-    assert admin.post('/api/accounts', json={**payload,'employeeId':'missing'}).status_code == 404
-    assert admin.post('/api/accounts', json=payload).status_code == 200
-    assert admin.post('/api/accounts', json=payload).status_code == 409
-    listed = admin.get('/api/accounts').json()
-    assert any(a['login']=='new.employee' and a['mustChangePassword'] for a in listed)
-    assert 'password_hash' not in str(listed) and payload['password'] not in str(listed)
-    with TestClient(app) as e:
-        result = sign_in_with(e, payload['login'], payload['password'])
-        assert result.json()['session']['mustChangePassword'] is True
-        assert e.get('/api/workspace', params={'period':PERIOD}).status_code == 403
-        assert e.get('/api/accounts').status_code == 403
-        r = e.post('/api/session/change-password', json={'currentPassword':payload['password'], 'newPassword':'personal-password-123'})
-        assert r.status_code == 200 and r.json()['session']['mustChangePassword'] is False
-        e.headers['X-CSRF-TOKEN'] = r.json()['csrfToken']
-        workspace(e)
-        assert e.post('/api/accounts', json=payload).status_code == 403
-        assert e.post('/api/accounts/reset-password', json={'login':'employee2','password':'temporary-password-456'}).status_code == 403
-    db.initialize(path)  # Re-running additive migration must preserve passwords/data.
-    with TestClient(app) as e:
-        assert sign_in_with(e, payload['login'], 'personal-password-123').status_code == 200
+    employee = {"id": "e3", "name": "新人", "floorIds": ["f1"]}
+    ok(admin, "saveEmployee", employee=employee)
+    account = employee_account(admin, "e3")
+    assert account["login"].startswith("emp-") and account["hasInitialPassword"]
+    assert "initialPassword" not in account and "password_hash" not in account
+    url = initial_password_url(account["login"])
+    response = admin.get(url)
+    assert response.status_code == 200 and response.headers["cache-control"] == "no-store"
+    password = response.json()["initialPassword"]
+    assert len(password) == 16
+    with db.transaction(path) as con:
+        stored = con.execute(
+            "SELECT password_hash,initial_password_ciphertext FROM accounts WHERE login=%s",
+            (account["login"],),
+        ).fetchone()
+        assert password not in stored["initial_password_ciphertext"]
+        assert auth.verify_password(stored["password_hash"], password)
+
+    ok(admin, "saveEmployee", employee={**employee, "name": "変更後"})
+    assert employee_account(admin, "e3") == account
+    assert admin.get(url).json()["initialPassword"] == password
+    db.initialize(path)
+    with TestClient(create_app(path)) as restarted_admin:
+        login(restarted_admin)
+        assert restarted_admin.get(url).json()["initialPassword"] == password
+
+    with TestClient(app) as employee_client:
+        assert sign_in_with(employee_client, account["login"], password).json()["session"]["mustChangePassword"]
+        assert employee_client.get("/api/workspace", params={"period": PERIOD}).status_code == 403
+        assert employee_client.get(url).status_code == 403
+        response = employee_client.post("/api/session/change-password", json={
+            "currentPassword": password, "newPassword": "personal-password-123",
+        })
+        assert response.status_code == 200 and not response.json()["session"]["mustChangePassword"]
+        employee_client.headers["X-CSRF-TOKEN"] = response.json()["csrfToken"]
+        workspace(employee_client)
+        assert employee_client.get(url).status_code == 403
+        assert employee_client.post("/api/accounts", json={"employeeId": "e3"}).status_code == 403
+        assert employee_client.post("/api/accounts/reset-password", json={"login": "employee2"}).status_code == 403
+    assert admin.get(url).status_code == 404
+    assert not employee_account(admin, "e3")["hasInitialPassword"]
+    with db.transaction(path) as con:
+        assert con.execute(
+            "SELECT initial_password_ciphertext FROM accounts WHERE login=%s",
+            (account["login"],),
+        ).fetchone()["initial_password_ciphertext"] is None
+    with TestClient(app) as employee_client:
+        assert sign_in_with(employee_client, account["login"], password).status_code == 401
+        assert sign_in_with(employee_client, account["login"], "personal-password-123").status_code == 200
+
+
+def test_issue_account_for_existing_employee(system):
+    app, path, admin = system
+    login(admin)
+    with db.transaction(path, write=True) as con:
+        db.put(con, "employees", {"id": "e3", "name": "既存", "floorIds": ["f1"]})
+    payload = {"employeeId": "e3"}
+    assert admin.post("/api/accounts", json=payload, headers={"X-CSRF-TOKEN": "bad"}).status_code == 403
+    assert admin.post("/api/accounts", json={"employeeId": "missing"}).status_code == 404
+    assert admin.post("/api/accounts", json=payload).status_code == 200
+    assert admin.post("/api/accounts", json=payload).status_code == 409
+    assert employee_account(admin, "e3")["hasInitialPassword"]
+    assert employee_account(admin, "e1")["login"] == "employee1"
+    with TestClient(app) as anonymous:
+        assert anonymous.get(initial_password_url(employee_account(admin, "e3")["login"])).status_code == 401
+
+
+def test_missing_key_rolls_back_registration(system, monkeypatch):
+    _, _, admin = system
+    login(admin)
+    before = workspace(admin)
+    monkeypatch.delenv("SHIFT_CREDENTIAL_KEY", raising=False)
+    response = command(admin, "saveEmployee", employee={"id": "e3", "name": "新人", "floorIds": ["f1"]})
+    assert response.status_code == 503
+    after = workspace(admin)
+    assert after["revision"] == before["revision"]
+    assert after["employees"] == before["employees"]
 
 
 def test_admin_reset_revokes_sessions_and_requires_change(system):
     app, _, admin = system
     login(admin)
     with TestClient(app) as e, TestClient(app) as other:
-        login(e, 'employee1'); login(other, 'employee1')
-        payload = {'login':'employee1','password':'reset-temporary-123'}
-        assert admin.post('/api/accounts/reset-password', json={**payload,'login':'admin'}).status_code == 404
-        assert admin.post('/api/accounts/reset-password', json=payload, headers={'X-CSRF-TOKEN':'bad'}).status_code == 403
-        assert admin.post('/api/accounts/reset-password', json=payload).status_code == 200
-        assert e.get('/api/workspace', params={'period':PERIOD}).status_code == 401
-        assert other.get('/api/workspace', params={'period':PERIOD}).status_code == 401
-        assert sign_in_with(e, 'employee1', PASSWORD).status_code == 401
-        assert sign_in_with(e, 'employee1', payload['password']).json()['session']['mustChangePassword']
-        assert e.post('/api/commands', json={'period':PERIOD,'type':'saveDraft','expectedRevision':0,'rows':[]}).status_code == 403
-        same = {'currentPassword':payload['password'],'newPassword':payload['password']}
-        assert e.post('/api/session/change-password', json=same).status_code == 400
-        assert e.post('/api/session/logout', json={}).status_code == 200
+        login(e, "employee1"); login(other, "employee1")
+        payload = {"login": "employee1"}
+        assert admin.post("/api/accounts/reset-password", json={"login": "admin"}).status_code == 404
+        assert admin.post("/api/accounts/reset-password", json=payload, headers={"X-CSRF-TOKEN": "bad"}).status_code == 403
+        assert admin.post("/api/accounts/reset-password", json=payload).status_code == 200
+        url = initial_password_url("employee1")
+        password = admin.get(url).json()["initialPassword"]
+        assert admin.post("/api/accounts/reset-password", json=payload).status_code == 200
+        new_password = admin.get(url).json()["initialPassword"]
+        assert new_password != password
+        assert e.get("/api/workspace", params={"period": PERIOD}).status_code == 401
+        assert other.get("/api/workspace", params={"period": PERIOD}).status_code == 401
+        assert sign_in_with(e, "employee1", PASSWORD).status_code == 401
+        assert sign_in_with(e, "employee1", password).status_code == 401
+        assert sign_in_with(e, "employee1", new_password).json()["session"]["mustChangePassword"]
+        assert e.post("/api/commands", json={"period": PERIOD, "type": "saveDraft", "expectedRevision": 0, "rows": []}).status_code == 403
+        assert e.post("/api/session/change-password", json={
+            "currentPassword": new_password, "newPassword": new_password,
+        }).status_code == 400
+        assert e.post("/api/session/logout", json={}).status_code == 200
 
 
 def test_password_change_current_password_csrf_and_rotation(system):
@@ -600,7 +672,8 @@ def test_delete_employee_revokes_account_sessions_and_persists(system):
         login(restart)
         assert workspace(restart)['employees'] == after['employees']
     assert command(c,'deleteEmployee',id='e2').status_code == 409
-    ok(c,'saveEmployee',employee={'id':'noaccount','name':'未登録','floorIds':[]})
+    with db.transaction(path, write=True) as con:
+        db.put(con, 'employees', {'id':'noaccount','name':'未登録','floorIds':[]})
     ok(c,'deleteEmployee',id='noaccount')
 
 
@@ -636,25 +709,18 @@ def test_delete_employee_permissions_csrf_and_revision(system):
     assert any(e['id']=='e2' for e in workspace(c)['employees'])
 
 
-def test_six_character_password_create_change_reset(system):
-    app, path, c=system
-    login(c)
-    ok(c,'saveEmployee',employee={'id':'six','name':'6文字確認','floorIds':['f1']})
-    payload={'login':'six-user','employeeId':'six','password':'abc123'}
-    assert c.post('/api/accounts',json={**payload,'password':'abc12'}).status_code == 422
-    assert c.post('/api/accounts',json=payload).status_code == 200
+def test_six_character_password_change_and_cli_create(system):
+    app, path, _ = system
     with TestClient(app) as employee:
-        assert sign_in_with(employee,'six-user','abc123').status_code == 200
-        assert employee.post('/api/session/change-password',json={'currentPassword':'abc123','newPassword':'def45'}).status_code == 422
-        changed=employee.post('/api/session/change-password',json={'currentPassword':'abc123','newPassword':'def456'})
-        assert changed.status_code == 200
-        assert not changed.json()['session']['mustChangePassword']
-    assert c.post('/api/accounts/reset-password',json={'login':'six-user','password':'ghi78'}).status_code == 422
-    assert c.post('/api/accounts/reset-password',json={'login':'six-user','password':'ghi789'}).status_code == 200
-    with TestClient(app) as employee:
-        assert sign_in_with(employee,'six-user','ghi789').json()['session']['mustChangePassword']
-    with db.transaction(path,write=True) as con:
-        db.put(con,'employees',{'id':'cli-six','name':'CLI','floorIds':[]})
-        with pytest.raises(Exception, match='6〜256'):
-            auth.create_account(con,'cli-six','abc12','employee','cli-six')
-        auth.create_account(con,'cli-six','abc123','employee','cli-six')
+        login(employee, "employee1")
+        assert employee.post("/api/session/change-password", json={
+            "currentPassword": PASSWORD, "newPassword": "def45",
+        }).status_code == 422
+        assert employee.post("/api/session/change-password", json={
+            "currentPassword": PASSWORD, "newPassword": "def456",
+        }).status_code == 200
+    with db.transaction(path, write=True) as con:
+        db.put(con, "employees", {"id": "cli-six", "name": "CLI", "floorIds": []})
+        with pytest.raises(Exception, match="6〜256"):
+            auth.create_account(con, "cli-six", "abc12", "employee", "cli-six")
+        auth.create_account(con, "cli-six", "abc123", "employee", "cli-six")

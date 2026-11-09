@@ -1,11 +1,13 @@
 """Opaque, revocable sessions and Argon2 password hashes."""
 
 import hashlib
+import os
 import re
 import secrets
 import time
 from argon2 import PasswordHasher
 from argon2.exceptions import VerificationError, InvalidHashError
+from cryptography.fernet import Fernet, InvalidToken
 from .service import RuleError
 
 HASHER = PasswordHasher()
@@ -30,6 +32,53 @@ def create_account(con, login, password, role, employee_id=None):
         "INSERT INTO accounts(login,password_hash,role,employee_id) VALUES(%s,%s,%s,%s)",
         (login, HASHER.hash(password), role, employee_id),
     )
+
+
+def credential_cipher():
+    try:
+        return Fernet(os.environ["SHIFT_CREDENTIAL_KEY"])
+    except (KeyError, ValueError):
+        raise RuleError("サーバーの SHIFT_CREDENTIAL_KEY を設定してください。", 503) from None
+
+
+def issue_employee_account(con, employee_id):
+    # Call inside the shared write transaction to serialize ID allocation.
+    while True:
+        login = "emp-" + secrets.token_hex(4)
+        if not con.execute("SELECT 1 FROM accounts WHERE login=%s", (login,)).fetchone():
+            break
+    cipher = credential_cipher()
+    password = secrets.token_urlsafe(12)
+    create_account(con, login, password, "employee", employee_id)
+    con.execute(
+        "UPDATE accounts SET must_change_password=true,initial_password_ciphertext=%s WHERE login=%s",
+        (cipher.encrypt(password.encode()).decode(), login),
+    )
+
+
+def reissue_employee_password(con, login, password_hash):
+    cipher = credential_cipher()
+    password = secrets.token_urlsafe(12)
+    while verify_password(password_hash, password):
+        password = secrets.token_urlsafe(12)
+    con.execute(
+        """UPDATE accounts SET password_hash=%s,must_change_password=true,
+           initial_password_ciphertext=%s WHERE login=%s""",
+        (HASHER.hash(password), cipher.encrypt(password.encode()).decode(), login),
+    )
+    con.execute("DELETE FROM sessions WHERE login=%s", (login,))
+    con.execute("DELETE FROM login_attempts WHERE key IN (%s,%s)",
+                ("login:" + digest(login), "password:" + digest(login)))
+
+
+def reveal_initial_password(ciphertext):
+    try:
+        return credential_cipher().decrypt(ciphertext.encode()).decode()
+    except InvalidToken:
+        raise RuleError(
+            "初期パスワードを復号できません。暗号化キーを確認するか、パスワードを再発行してください。",
+            503,
+        ) from None
 
 
 def verify_password(encoded, password):

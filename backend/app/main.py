@@ -151,9 +151,29 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
     def accounts(request: Request):
         with db.transaction(database) as con:
             require_admin(con, request)
-            return [{"login": a["login"], "employeeId": a["employee_id"],
-                     "mustChangePassword": a["must_change_password"]}
-                    for a in con.execute("SELECT login,employee_id,must_change_password FROM accounts WHERE role='employee' ORDER BY login")]
+            return [
+                {"login": a["login"], "employeeId": a["employee_id"],
+                 "mustChangePassword": a["must_change_password"],
+                 "hasInitialPassword": a["has_initial_password"]}
+                for a in con.execute(
+                    """SELECT login,employee_id,must_change_password,
+                       (must_change_password AND initial_password_ciphertext IS NOT NULL) AS has_initial_password
+                       FROM accounts WHERE role='employee' ORDER BY login"""
+                )
+            ]
+
+    @api.get("/api/accounts/initial-password")
+    def initial_password(request: Request, login: Annotated[str, Query(min_length=1, max_length=128)]):
+        with db.transaction(database) as con:
+            require_admin(con, request)
+            account = con.execute(
+                """SELECT initial_password_ciphertext FROM accounts
+                   WHERE login=%s AND role='employee' AND must_change_password""",
+                (login,),
+            ).fetchone()
+            if not account or not account["initial_password_ciphertext"]:
+                raise RuleError("表示できる初期パスワードはありません。", 404)
+            return {"initialPassword": auth.reveal_initial_password(account["initial_password_ciphertext"])}
 
     @api.post("/api/accounts")
     def create_account(body: CreateAccount, request: Request):
@@ -161,24 +181,21 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
             require_admin(con, request, csrf=True)
             if not con.execute("SELECT 1 FROM employees WHERE id=%s", (body.employeeId,)).fetchone():
                 raise RuleError("従業員が見つかりません。", 404)
-            if con.execute("SELECT 1 FROM accounts WHERE login=%s OR employee_id=%s", (body.login, body.employeeId)).fetchone():
-                raise RuleError("ログインIDまたは従業員のアカウントは登録済みです。", 409)
-            auth.create_account(con, body.login, body.password, "employee", body.employeeId)
-            con.execute("UPDATE accounts SET must_change_password=true WHERE login=%s", (body.login,))
+            if con.execute("SELECT 1 FROM accounts WHERE employee_id=%s", (body.employeeId,)).fetchone():
+                raise RuleError("従業員のアカウントは登録済みです。", 409)
+            auth.issue_employee_account(con, body.employeeId)
             return {"ok": True}
 
     @api.post("/api/accounts/reset-password")
     def reset_password(body: ResetPassword, request: Request):
         with db.transaction(database, write=True) as con:
             require_admin(con, request, csrf=True)
-            account = con.execute("SELECT * FROM accounts WHERE login=%s AND role='employee'", (body.login,)).fetchone()
+            account = con.execute(
+                "SELECT password_hash FROM accounts WHERE login=%s AND role='employee'", (body.login,)
+            ).fetchone()
             if not account:
                 raise RuleError("従業員アカウントが見つかりません。", 404)
-            if auth.verify_password(account["password_hash"], body.password):
-                raise RuleError("現在とは異なる仮パスワードを設定してください。")
-            con.execute("UPDATE accounts SET password_hash=%s,must_change_password=true WHERE login=%s", (auth.HASHER.hash(body.password), body.login))
-            con.execute("DELETE FROM sessions WHERE login=%s", (body.login,))
-            con.execute("DELETE FROM login_attempts WHERE key=%s", ("login:" + auth.digest(body.login),))
+            auth.reissue_employee_password(con, body.login, account["password_hash"])
             return {"ok": True}
 
     @api.post("/api/session/change-password")
@@ -195,7 +212,7 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
                 return JSONResponse({"message": "現在のパスワードが違います。"}, status_code=400)
             if body.currentPassword == body.newPassword:
                 raise RuleError("現在とは異なるパスワードを指定してください。")
-            con.execute("UPDATE accounts SET password_hash=%s,must_change_password=false WHERE login=%s", (auth.HASHER.hash(body.newPassword), login))
+            con.execute("UPDATE accounts SET password_hash=%s,must_change_password=false,initial_password_ciphertext=NULL WHERE login=%s", (auth.HASHER.hash(body.newPassword), login))
             con.execute("DELETE FROM sessions WHERE login=%s", (login,))
             con.execute("DELETE FROM login_attempts WHERE key=%s", (keys[0],))
             csrf = auth.new_session(con, response, secure, login=login)
@@ -218,6 +235,10 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
                     409,
                 )
             state = db.load(con, body.period)
+            new_employee = (
+                body.type == "saveEmployee"
+                and all(e["id"] != body.employee.id for e in state["employees"])
+            )
             if body.type == "deleteEmployee":
                 delete_employee(state, user, body.id,
                                 (r["data"] for r in con.execute("SELECT data FROM periods")))
@@ -235,6 +256,8 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
             else:
                 apply(state, user, body.model_dump())
             db.save(con, state)
+            if new_employee:
+                auth.issue_employee_account(con, body.employee.id)
             return {"ok": True, "revision": db.revision(con)}
 
     return api
