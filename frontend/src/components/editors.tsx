@@ -7,6 +7,7 @@ import {
   Row,
   conflicts,
   times,
+  today,
   validateRow,
 } from "../domain/model";
 import { CheckBox, Modal, Picker } from "./controls";
@@ -56,6 +57,7 @@ export function ShiftEditor({
     e.preventDefault();
     setError("");
     try {
+      if (r.date < today() || row.date < today()) throw new Error("過去日のシフトは入力・変更できません。");
       validateRow(
         r,
         period,
@@ -94,7 +96,7 @@ export function ShiftEditor({
           <input
             type="date"
             required
-            min={period.start}
+            min={period.start < today() ? today() : period.start}
             max={period.end}
             value={r.date}
             onChange={(e) => change({ date: e.target.value })}

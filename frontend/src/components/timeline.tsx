@@ -19,6 +19,7 @@ export function Timeline({
   onDate,
   busy,
   canConfirm,
+  earliestEditDate,
   onEdit,
   onStatus,
   onMove,
@@ -30,6 +31,7 @@ export function Timeline({
   onDate: (v: string) => void;
   busy: boolean;
   canConfirm: boolean;
+  earliestEditDate: string;
   onEdit: (s: Shift) => void;
   onMove: (s: Shift) => Promise<void>;
   onStatus: (ids: string[], status: Status) => void;
@@ -190,7 +192,7 @@ export function Timeline({
                             }}
                           >
                             {shifts.map((s, i) => (
-                              <DragBar key={s.id} shift={s} index={i} from={from} span={span} busy={busy}
+                              <DragBar key={s.id} shift={s} index={i} from={from} span={span} busy={busy || s.date < earliestEditDate}
                                 name={e.name} onDetail={()=>setDetail(s.id)} onMove={onMove} />
                             ))}
                           </div>
@@ -225,7 +227,7 @@ export function Timeline({
               <>
                 <button
                   className="primary"
-                  disabled={busy}
+                  disabled={busy || active.date < earliestEditDate}
                   onClick={() => {
                     setDetail(null);
                     onEdit(active);

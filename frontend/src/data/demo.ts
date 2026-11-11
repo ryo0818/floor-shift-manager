@@ -169,6 +169,7 @@ function ownSubmission(b: Bucket) {
 export function commandDemo(id: string, c: Command) {
   if (!session) throw new Error("ログインしてください。");
   const b = get(id);
+  const currentDate = today();
   if (c.type === "saveDraft" || c.type === "submit") {
     if (session.role !== "employee")
       throw new Error("本人の画面から操作してください。");
@@ -177,31 +178,42 @@ export function commandDemo(id: string, c: Command) {
     const e = employees.find((e) => e.id === session!.employeeId)!;
     const s = ownSubmission(b);
     if (c.type === "saveDraft") {
-      c.rows.forEach((r) => validateRow(r, b.period, e.floorIds));
+      const past = new Map(s.draftRows.filter(r => r.date < currentDate).map(r => [r.id, r]));
+      for (const row of c.rows) {
+        if (row.date < currentDate || past.has(row.id)) {
+          const original = past.get(row.id);
+          if (!original || row.date !== original.date || row.floorId !== original.floorId
+            || row.start !== original.start || row.end !== original.end || row.note !== original.note)
+            throw new Error("過去日の希望は入力・変更できません。");
+          continue;
+        }
+        validateRow(row, b.period, e.floorIds);
+      }
       if (c.note.length > 1000)
         throw new Error("提出全体のメモは1000文字以内で入力してください。");
       if (new Set(c.rows.map((r) => r.id)).size !== c.rows.length)
         throw new Error("シフトIDが重複しています。");
-      s.draftRows = copy(c.rows);
+      s.draftRows = copy([...past.values(), ...c.rows.filter(r => r.date >= currentDate)]);
       s.draftNote = c.note;
       s.dirty = true;
       return;
     }
-    s.draftRows.forEach((r) => validateRow(r, b.period, e.floorIds));
-    if (conflicts(s.draftRows).length && !c.acknowledgeOverlap)
+    const editable = s.draftRows.filter(r => r.date >= currentDate);
+    editable.forEach((r) => validateRow(r, b.period, e.floorIds));
+    if (conflicts(editable).length && !c.acknowledgeOverlap)
       throw new Error("重複する希望があります。確認してから提出してください。");
-    if (b.shifts.some((r) => r.employeeId === e.id && r.status !== "pending"))
+    if (b.shifts.some((r) => r.employeeId === e.id && r.date >= currentDate && r.status !== "pending"))
       throw new Error(
         "管理者が処理済みのシフトがあります。再提出は管理者にご相談ください。",
       );
-    s.submittedRows = copy(s.draftRows);
+    s.submittedRows = copy([...s.submittedRows.filter(r => r.date < currentDate), ...editable]);
     s.submittedNote = s.draftNote;
     s.submittedAt = new Date().toISOString();
     s.dirty = false;
     b.shifts = b.shifts
-      .filter((r) => r.employeeId !== e.id)
+      .filter((r) => r.employeeId !== e.id || r.date < currentDate)
       .concat(
-        s.draftRows.map((r) => ({
+        editable.map((r) => ({
           ...copy(r),
           employeeId: e.id,
           status: "pending",
@@ -212,11 +224,12 @@ export function commandDemo(id: string, c: Command) {
   }
   if (session.role !== "admin") throw new Error("管理者のみ操作できます。");
   if (c.type === "setDeadline") {
-    if (!Number.isFinite(Date.parse(c.deadline)))
+    if (c.deadline !== null && !Number.isFinite(Date.parse(c.deadline)))
       throw new Error("有効な締切日時を入力してください。");
     if (
-      Date.parse(c.deadline) > Date.now() &&
-      b.shifts.some((s) => s.status !== "pending")
+      (c.deadline === null || Date.parse(c.deadline) > Date.now()) &&
+      b.period.deadline && Date.parse(b.period.deadline) <= Date.now() &&
+      b.shifts.some((s) => s.date >= currentDate && s.status !== "pending")
     )
       throw new Error(
         "確定・見送り済みがあります。未確定に戻してから受付を再開してください。",
@@ -276,6 +289,8 @@ export function commandDemo(id: string, c: Command) {
     if (!employees.some((e) => e.id === r.employeeId))
       throw new Error("従業員を選択してください。");
     const old = b.shifts.find((x) => x.id === r.id);
+    if (r.date < currentDate || (old && old.date < currentDate))
+      throw new Error("過去日のシフトは入力・変更できません。");
     if (old && old.status !== "pending")
       throw new Error("未確定に戻してから変更してください。");
     if (
@@ -322,9 +337,9 @@ export function commandDemo(id: string, c: Command) {
     )
       throw new Error("状態が変わっています。再確認してください。");
     if (c.status === "confirmed") {
-      if (!b.period.deadline || !expired(b.period))
+      if (b.period.deadline && Date.parse(b.period.deadline) > Date.now())
         throw new Error(
-          "仮ルール：締切後に確定できます。締切前の確定可否は要件未定です。",
+          "締切を設定した期間は、締切後に確定できます。",
         );
       const all = b.shifts.filter(
         (x) => x.status === "confirmed" || ids.has(x.id),

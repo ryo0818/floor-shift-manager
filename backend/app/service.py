@@ -5,6 +5,9 @@ from copy import deepcopy
 from datetime import date, datetime, timezone
 import re
 import uuid
+from zoneinfo import ZoneInfo
+
+JST = ZoneInfo("Asia/Tokyo")
 
 
 class RuleError(Exception):
@@ -94,13 +97,14 @@ def project(state, user, revision):
 
 def apply(state, user, c, now=None):
     now = now or datetime.now(timezone.utc)
+    today = now.astimezone(JST).date().isoformat()
     kind = c["type"]
     period, shifts = state["period"], state["shifts"]
     floor_ids = [f["id"] for f in state["floors"]]
     if kind in ("saveDraft", "submit"):
         if user["role"] != "employee":
             raise RuleError("本人の従業員アカウントから操作してください。", 403)
-        if not period["deadline"] or instant(period["deadline"]) <= now:
+        if period["end"] < today or (period["deadline"] and instant(period["deadline"]) <= now):
             raise RuleError("受付が終了しています。変更は管理者にご相談ください。", 409)
         employee = next(
             (e for e in state["employees"] if e["id"] == user["employeeId"]), None
@@ -124,24 +128,31 @@ def apply(state, user, c, now=None):
         if kind == "saveDraft":
             if len({r["id"] for r in c["rows"]}) != len(c["rows"]):
                 raise RuleError("シフトIDが重複しています。")
+            past_drafts = {r["id"]: r for r in submission["draftRows"] if r["date"] < today}
             for row in c["rows"]:
+                if row["date"] < today or row["id"] in past_drafts:
+                    if past_drafts.get(row["id"]) != row:
+                        raise RuleError("過去日の希望は入力・変更できません。", 409)
+                    continue
                 validate_row(
                     row, period, [f for f in employee["floorIds"] if f in floor_ids]
                 )
             submission.update(
-                draftRows=deepcopy(c["rows"]), draftNote=c["note"], dirty=True
+                draftRows=deepcopy([*past_drafts.values(), *(r for r in c["rows"] if r["date"] >= today)]),
+                draftNote=c["note"], dirty=True
             )
             return
-        for row in submission["draftRows"]:
+        editable_drafts = [r for r in submission["draftRows"] if r["date"] >= today]
+        for row in editable_drafts:
             validate_row(
                 row, period, [f for f in employee["floorIds"] if f in floor_ids]
             )
-        if next(pairs(submission["draftRows"]), None) and not c["acknowledgeOverlap"]:
+        if next(pairs(editable_drafts), None) and not c["acknowledgeOverlap"]:
             raise RuleError(
                 "重複する希望があります。確認してから提出してください。", 409
             )
         if any(
-            s["employeeId"] == employee["id"] and s["status"] != "pending"
+            s["employeeId"] == employee["id"] and s["date"] >= today and s["status"] != "pending"
             for s in shifts
         ):
             raise RuleError(
@@ -149,13 +160,13 @@ def apply(state, user, c, now=None):
                 409,
             )
         submission.update(
-            submittedRows=deepcopy(submission["draftRows"]),
+            submittedRows=deepcopy([*(r for r in submission["submittedRows"] if r["date"] < today), *editable_drafts]),
             submittedNote=submission["draftNote"],
             submittedAt=now.isoformat(),
             dirty=False,
         )
         # Server-generated management IDs prevent a client row ID from colliding with another person's shift.
-        state["shifts"] = [s for s in shifts if s["employeeId"] != employee["id"]] + [
+        state["shifts"] = [s for s in shifts if s["employeeId"] != employee["id"] or s["date"] < today] + [
             {
                 **deepcopy(r),
                 "id": str(uuid.uuid4()),
@@ -163,19 +174,22 @@ def apply(state, user, c, now=None):
                 "status": "pending",
                 "original": deepcopy(r),
             }
-            for r in submission["draftRows"]
+            for r in editable_drafts
         ]
         return
     if user["role"] != "admin":
         raise RuleError("管理者のみ操作できます。", 403)
     if kind == "setDeadline":
-        deadline = instant(c["deadline"])
-        if deadline > now and any(s["status"] != "pending" for s in shifts):
+        deadline = instant(c["deadline"]) if c["deadline"] is not None else None
+        was_closed = period["deadline"] and instant(period["deadline"]) <= now
+        if (deadline is None or deadline > now) and was_closed and any(
+            s["status"] != "pending" and s["date"] >= today for s in shifts
+        ):
             raise RuleError(
                 "確定・見送り済みがあります。未確定に戻してから受付を再開してください。",
                 409,
             )
-        period["deadline"] = deadline.isoformat()
+        period["deadline"] = deadline.isoformat() if deadline else None
     elif kind == "saveFloor":
         f = deepcopy(c["floor"])
         f["name"] = f["name"].strip()
@@ -199,6 +213,8 @@ def apply(state, user, c, now=None):
         if not any(e["id"] == row["employeeId"] for e in state["employees"]):
             raise RuleError("従業員を選択してください。")
         old = next((s for s in shifts if s["id"] == row["id"]), None)
+        if row["date"] < today or (old and old["date"] < today):
+            raise RuleError("過去日のシフトは入力・変更できません。", 409)
         if old and old["status"] != "pending":
             raise RuleError("未確定に戻してから変更してください。", 409)
         if not c["acknowledgeOverlap"] and any(
@@ -239,8 +255,8 @@ def apply(state, user, c, now=None):
         ):
             raise RuleError("状態が変わっています。再確認してください。", 409)
         if status == "confirmed":
-            if not period["deadline"] or instant(period["deadline"]) > now:
-                raise RuleError("仮ルール：締切後に確定できます。", 409)
+            if period["deadline"] and instant(period["deadline"]) > now:
+                raise RuleError("締切を設定した期間は、締切後に確定できます。", 409)
             rows = [s for s in shifts if s["status"] == "confirmed" or s["id"] in ids]
             conflicts = [
                 (a, b)

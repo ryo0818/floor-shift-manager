@@ -370,7 +370,7 @@ export default function App() {
   function newRow(date?: string): Row {
     return {
       id: crypto.randomUUID(),
-      date: date || data!.period.start,
+      date: date || (data!.period.start < today() ? today() : data!.period.start),
       start: "09:00",
       end: "17:00",
       floorId:
@@ -484,7 +484,7 @@ export default function App() {
                 <button
                   className="btn primary"
                   disabled={
-                    busy || !data?.employees.length || !data?.floors.length
+                    busy || !data?.employees.length || !data?.floors.length || data.period.end < today(clock)
                   }
                   onClick={() =>
                     setEditor({
@@ -622,9 +622,7 @@ export default function App() {
                       data.employees.find((e) => e.id === id)?.name || "未登録";
                     const canConfirm =
                       data.policy.allowEarlyConfirm ||
-                      Boolean(
-                        data.period.deadline && expired(data.period, clock),
-                      );
+                      !data.period.deadline || clock >= Date.parse(data.period.deadline);
                     const cell = (s: Shift) => (
                       <>
                         <div className="row-time">
@@ -800,7 +798,7 @@ export default function App() {
                           )}
                           {!canConfirm && (
                             <p className="policy-note">
-                              仮ルール：確定は提出締切後に行います。締切前の確定可否は要件未定です。
+                              締切を設定した期間は、締切後に確定できます。
                             </p>
                           )}
                           {boardMode === "timeline" ? (
@@ -812,6 +810,7 @@ export default function App() {
                               onDate={setTimelineDate}
                               busy={busy}
                               canConfirm={canConfirm}
+                              earliestEditDate={today(clock)}
                               onEdit={(s) =>
                                 setEditor({
                                   row: s,
@@ -1051,7 +1050,7 @@ export default function App() {
                                                       <button
                                                         className="icon-btn"
                                                         aria-label={`${name(s.employeeId)}のシフトを編集`}
-                                                        disabled={busy}
+                                                        disabled={busy || s.date < today(clock)}
                                                         onClick={() =>
                                                           setEditor({
                                                             row: s,
@@ -1124,11 +1123,9 @@ export default function App() {
                         <span className="eyebrow">SUBMISSION DEADLINE</span>
                         <h2>{periodLabel(data.period)}の提出締切</h2>
                         <p>
-                          {data.period.deadline
-                            ? expired(data.period, clock)
-                              ? "受付終了 · 変更は管理者のみ可能"
-                              : "受付中 · 従業員は修正・再提出できます"
-                            : "締切を設定すると受付を開始できます。"}
+                          {expired(data.period, clock)
+                            ? "受付終了"
+                            : "受付中 · 締切を設定しなくても今日以降の希望を入力できます。"}
                         </p>
                       </div>
                       <form
@@ -1138,20 +1135,19 @@ export default function App() {
                             run(
                               {
                                 type: "setDeadline",
-                                deadline: new Date(
-                                  deadline + ":00+09:00",
-                                ).toISOString(),
+                                deadline: deadline
+                                  ? new Date(deadline + ":00+09:00").toISOString()
+                                  : null,
                               },
-                              "締切を設定しました",
+                              deadline ? "締切を設定しました" : "締切を解除しました",
                             ),
                           );
                         }}
                       >
                         <label>
-                          締切日時（日本時間）
+                          締切日時（任意・日本時間）
                           <input
                             type="datetime-local"
-                            required
                             value={deadline}
                             onChange={(e) => setDeadline(e.target.value)}
                           />
@@ -1159,6 +1155,12 @@ export default function App() {
                         <button className="btn primary" disabled={busy}>
                           締切を保存
                         </button>
+                        {data.period.deadline && (
+                          <button type="button" className="btn secondary" disabled={busy}
+                            onClick={() => safe(() => run({ type: "setDeadline", deadline: null }, "締切を解除しました"))}>
+                            締切を解除
+                          </button>
+                        )}
                       </form>
                     </section>
                     <section className="board">
@@ -1352,8 +1354,10 @@ export default function App() {
                     (s) => s.employeeId === session.employeeId,
                   );
                   const locked = expired(data.period, clock);
+                  const currentDate = today(clock);
+                  const editableRows = rows.filter(row => row.date >= currentDate);
                   const validateInputs = () => {
-                    for (const row of rows) {
+                    for (const row of editableRows) {
                       try { validateRow(row, data.period, data.floors.map(f=>f.id)); }
                       catch(e) { throw new Error(`${shortDate(row.date)}：${(e as Error).message} 未入力の行は削除してください。`); }
                     }
@@ -1361,7 +1365,7 @@ export default function App() {
                   const saveDraft = async () => {
                     try {
                       validateInputs();
-                      if (conflicts(rows).length && !window.confirm("希望時間が重複しています。このまま下書き保存しますか？")) return;
+                      if (conflicts(editableRows).length && !window.confirm("希望時間が重複しています。このまま下書き保存しますか？")) return;
                       await run({ type: "saveDraft", rows, note }, "下書きを保存しました");
                     } catch(e) { setError((e as Error).message); }
                   };
@@ -1374,11 +1378,7 @@ export default function App() {
                           <span
                             className={`status ${locked ? "declined" : "confirmed"}`}
                           >
-                            {!data.period.deadline
-                              ? "受付準備中"
-                              : locked
-                                ? "受付終了"
-                                : "受付中"}
+                            {locked ? "受付終了" : "受付中"}
                           </span>
                           <strong>{periodLabel(data.period)}</strong>
                         </div>
@@ -1389,7 +1389,7 @@ export default function App() {
                         <small>
                           {locked
                             ? "変更が必要な場合は管理者にご相談ください。"
-                            : "空欄の日は休み希望になります。締切前は再提出できます。"}
+                            : "日本時間の今日以降を入力できます。空欄の日は休み希望になります。"}
                         </small>
                       </div>
                       <div className="submission-info">
@@ -1419,9 +1419,9 @@ export default function App() {
                       <section className="employee-days">
                         {daysOf(data.period).map((d) => (
                           <InlineDay key={d} date={d} rows={rows.filter(r=>r.date===d)}
-                            floors={data.floors} period={data.period} disabled={locked || busy}
+                            floors={data.floors} period={data.period} disabled={locked || busy} past={d < currentDate}
                             onChange={row=>{
-                              if(expired(data.period) || busy) return;
+                              if(expired(data.period) || d < today() || busy) return;
                               setRows(current=>current.some(r=>r.id===row.id) ? current.map(r=>r.id===row.id ? row : r) : [...current,row]);
                               setDirty(true);
                             }}
@@ -1429,7 +1429,8 @@ export default function App() {
                               title:"希望の入力行を削除しますか？",
                               text:`${shortDate(d)} ${row.start || "未入力"}〜${row.end || "未入力"}。削除後は下書き保存・再提出してください。`,
                               action:async()=>{
-                                if(expired(data.period)) throw new Error("受付が終了しています。");
+                                if (d < today()) throw new Error("過去日の希望は変更できません。");
+                                if (expired(data.period)) throw new Error("受付が終了しています。");
                                 setRows(current=>current.filter(r=>r.id!==row.id));setDirty(true);
                               },
                             })}
@@ -1478,15 +1479,15 @@ export default function App() {
                             disabled={locked || busy}
                             onClick={() => {
                               try { validateInputs(); } catch(e) { setError((e as Error).message); return; }
-                              const pairs = conflicts(rows);
+                              const pairs = conflicts(editableRows);
                               setConfirm({
                                 title: s?.submittedAt
                                   ? "希望シフトを再提出しますか？"
                                   : "希望シフトを提出しますか？",
                                 text:
-                                  (rows.length
-                                    ? `${rows.length}件を提出します。空欄の日は休み希望です。`
-                                    : "すべての日を休み希望として提出します。") +
+                                  (editableRows.length
+                                    ? `今日以降の希望${editableRows.length}件を提出します。空欄の日は休み希望です。`
+                                    : "今日以降をすべて休み希望として提出します。") +
                                   (pairs.length
                                     ? "\n希望時間の重複があります。確認のうえ、このまま提出します。\n" +
                                       pairs
