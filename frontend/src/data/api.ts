@@ -4,13 +4,14 @@ const demo = DEMO ? import("./demo") : null;
 let csrf = "";
 let sessionRequest: Promise<Session | null> | null = null;
 const revisions = new Map<string, number>();
-const cleanRow = ({ id, date, start, end, floorId, note }: Row): Row => ({
+const cleanRow = ({ id, date, start, end, floorId, note, fullTime = false }: Row): Row => ({
   id,
   date,
   start,
   end,
   floorId,
   note,
+  fullTime,
 });
 async function request<T>(
   path: string,

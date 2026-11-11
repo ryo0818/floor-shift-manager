@@ -7,6 +7,9 @@ import {
   Row,
   conflicts,
   times,
+  startTimes,
+  floorHours,
+  resolveFullTime,
   today,
   validateRow,
 } from "../domain/model";
@@ -50,7 +53,7 @@ export function ShiftEditor({
     ),
   ]).filter((x) => x.a.id === r.id || x.b.id === r.id);
   const change = (v: Partial<Row>) => {
-    setR({ ...r, ...v });
+    setR(resolveFullTime({ ...r, ...v }, floors));
     setAck(false);
   };
   async function save(e: FormEvent) {
@@ -115,6 +118,8 @@ export function ShiftEditor({
             <small>割り当てフロアが1つのため変更できません。</small>
           )}
         </label>
+        <CheckBox checked={!!r.fullTime} label="フルタイム" onChange={() => change({fullTime: !r.fullTime, ...(r.fullTime && r.start < "10:00" ? {start:"10:00"} : {})})}/>
+        {r.fullTime && <small>フロア設定の時間：{r.start}〜{r.end}</small>}
         <div className="form-grid">
           <label>
             開始
@@ -122,13 +127,15 @@ export function ShiftEditor({
               label="開始時刻"
               value={r.start}
               onChange={(v) => change({ start: v })}
-              items={times.map((t) => ({ id: t, name: t }))}
+              disabled={!!r.fullTime}
+              items={[...(r.start < "10:00" ? [r.start] : []), ...startTimes].map((t) => ({ id: t, name: t, disabled: t < "10:00" }))}
             />
           </label>
           <label>
             終了
             <Picker
               label="終了時刻"
+              disabled={!!r.fullTime}
               value={r.end}
               onChange={(v) => change({ end: v })}
               items={times.map((t) => ({ id: t, name: t }))}
@@ -203,6 +210,8 @@ export function MasterEditor({
   const [name, setName] = useState(person?.name || floor?.name || ""),
     [ids, setIds] = useState(person?.floorIds || []),
     [color, setColor] = useState(floor?.color || "#236b59"),
+    [workStart, setWorkStart] = useState(floorHours(floor).start),
+    [workEnd, setWorkEnd] = useState(floorHours(floor).end),
     [error, setError] = useState("");
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -211,6 +220,7 @@ export function MasterEditor({
       return;
     }
     try {
+      if (kind === "floor" && workStart >= workEnd) throw new Error("フルタイムの終了は開始より後にしてください。");
       await onSave(
         kind === "employee"
           ? {
@@ -218,7 +228,7 @@ export function MasterEditor({
               name: name.trim(),
               floorIds: ids,
             }
-          : { id: floor?.id || crypto.randomUUID(), name: name.trim(), color },
+          : { id: floor?.id || crypto.randomUUID(), name: name.trim(), color, workStart, workEnd },
       );
     } catch (e) {
       setError((e as Error).message);
@@ -246,7 +256,7 @@ export function MasterEditor({
           />
         </label>
         {kind === "floor" ? (
-          <label>
+          <><label>
             表示色
             <input
               type="color"
@@ -254,6 +264,8 @@ export function MasterEditor({
               onChange={(e) => setColor(e.target.value)}
             />
           </label>
+          <label>フルタイム開始<Picker label="フルタイム開始" value={workStart} onChange={setWorkStart} items={times.map(t=>({id:t,name:t}))}/></label>
+          <label>フルタイム終了<Picker label="フルタイム終了" value={workEnd} onChange={setWorkEnd} items={times.map(t=>({id:t,name:t}))}/></label></>
         ) : (
           <fieldset>
             <legend>勤務可能フロア</legend>

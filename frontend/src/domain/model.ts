@@ -6,7 +6,7 @@ export type Session = {
   csrfToken?: string;
   mustChangePassword?: boolean;
 };
-export type Floor = { id: string; name: string; color: string };
+export type Floor = { id: string; name: string; color: string; workStart?: string; workEnd?: string };
 export type Employee = { id: string; name: string; floorIds: string[] };
 export type Status = "pending" | "confirmed" | "declined";
 export type Row = {
@@ -16,6 +16,7 @@ export type Row = {
   end: string;
   floorId: string;
   note: string;
+  fullTime?: boolean;
 };
 export type Shift = Row & { employeeId: string; status: Status; original: Row };
 export type Submission = {
@@ -111,6 +112,13 @@ export const times = Array.from(
   (_, i) =>
     `${String(Math.floor(i / 4)).padStart(2, "0")}:${["00", "15", "30", "45"][i % 4]}`,
 );
+export const startTimes = times.filter(t => t >= "10:00");
+export function floorHours(floor?: Floor) {
+  return { start: floor?.workStart ?? "09:00", end: floor?.workEnd ?? "17:00" };
+}
+export function resolveFullTime<T extends Row>(row: T, floors: Floor[]): T {
+  return row.fullTime ? { ...row, ...floorHours(floors.find(f => f.id === row.floorId)) } : row;
+}
 export function overlaps(a: Row, b: Row) {
   return (
     a.id !== b.id && a.date === b.date && a.start < b.end && a.end > b.start

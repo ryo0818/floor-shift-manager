@@ -15,6 +15,9 @@ import {
   periodOf,
   today,
   validateRow,
+  resolveFullTime,
+  floorHours,
+  times,
 } from "../domain/model";
 const copy = <T>(v: T): T => structuredClone(v);
 const colors = ["#236b59", "#3269b0", "#9165b5", "#b97932", "#b75272"];
@@ -167,6 +170,7 @@ function ownSubmission(b: Bucket) {
   return s;
 }
 export function commandDemo(id: string, c: Command) {
+  c = copy(c);
   if (!session) throw new Error("ログインしてください。");
   const b = get(id);
   const currentDate = today();
@@ -183,10 +187,11 @@ export function commandDemo(id: string, c: Command) {
         if (row.date < currentDate || past.has(row.id)) {
           const original = past.get(row.id);
           if (!original || row.date !== original.date || row.floorId !== original.floorId
-            || row.start !== original.start || row.end !== original.end || row.note !== original.note)
+            || !!row.fullTime !== !!original.fullTime || row.start !== original.start || row.end !== original.end || row.note !== original.note)
             throw new Error("過去日の希望は入力・変更できません。");
           continue;
         }
+        Object.assign(row, resolveFullTime(row, floors));
         validateRow(row, b.period, e.floorIds);
       }
       if (c.note.length > 1000)
@@ -259,6 +264,8 @@ export function commandDemo(id: string, c: Command) {
   }
   if (c.type === "saveFloor") {
     const f = c.floor;
+    const hours = floorHours(f);
+    if (!times.includes(hours.start) || !times.includes(hours.end) || hours.start >= hours.end) throw new Error("フルタイムの終了は開始より後にしてください。");
     if (!f.name.trim() || f.name.length > 50 || !/^#[\da-f]{6}$/i.test(f.color))
       throw new Error("フロア名（50文字以内）と色を確認してください。");
     if (floors.some((x) => x.id !== f.id && x.name.trim() === f.name.trim()))
@@ -280,7 +287,7 @@ export function commandDemo(id: string, c: Command) {
     return;
   }
   if (c.type === "saveShift") {
-    const r = c.shift;
+    const r = resolveFullTime(c.shift, floors);
     validateRow(
       r,
       b.period,

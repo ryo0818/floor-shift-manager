@@ -371,7 +371,7 @@ export default function App() {
     return {
       id: crypto.randomUUID(),
       date: date || (data!.period.start < today() ? today() : data!.period.start),
-      start: "09:00",
+      start: "10:00",
       end: "17:00",
       floorId:
         (floor !== "all" && data!.floors.some((f) => f.id === floor)

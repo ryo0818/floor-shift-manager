@@ -70,6 +70,15 @@ def validate_row(row, period, allowed):
         raise RuleError("選択できないフロアです。割り当てを確認してください。")
 
 
+def resolve_full_time(row, floors):
+    if row.get("fullTime"):
+        floor = next((f for f in floors if f["id"] == row["floorId"]), None)
+        if floor is None:
+            raise RuleError("選択できないフロアです。")
+        row.update(start=floor.get("workStart", "09:00"), end=floor.get("workEnd", "17:00"))
+    return row
+
+
 def project(state, user, revision):
     admin = user["role"] == "admin"
     own = [e for e in state["employees"] if e["id"] == user.get("employeeId")]
@@ -131,9 +140,11 @@ def apply(state, user, c, now=None):
             past_drafts = {r["id"]: r for r in submission["draftRows"] if r["date"] < today}
             for row in c["rows"]:
                 if row["date"] < today or row["id"] in past_drafts:
-                    if past_drafts.get(row["id"]) != row:
+                    original = past_drafts.get(row["id"])
+                    if original is None or {**original, "fullTime": original.get("fullTime", False)} != {**row, "fullTime": row.get("fullTime", False)}:
                         raise RuleError("過去日の希望は入力・変更できません。", 409)
                     continue
+                resolve_full_time(row, state["floors"])
                 validate_row(
                     row, period, [f for f in employee["floorIds"] if f in floor_ids]
                 )
@@ -193,6 +204,8 @@ def apply(state, user, c, now=None):
     elif kind == "saveFloor":
         f = deepcopy(c["floor"])
         f["name"] = f["name"].strip()
+        if f.get("workStart", "09:00") >= f.get("workEnd", "17:00"):
+            raise RuleError("フルタイムの終了は開始より後にしてください。")
         if not f["name"]:
             raise RuleError("フロア名を入力してください。")
         if any(x["id"] != f["id"] and x["name"] == f["name"] for x in state["floors"]):
@@ -208,7 +221,7 @@ def apply(state, user, c, now=None):
         e["floorIds"] = list(dict.fromkeys(e["floorIds"]))
         state["employees"] = [x for x in state["employees"] if x["id"] != e["id"]] + [e]
     elif kind == "saveShift":
-        row = deepcopy(c["shift"])
+        row = resolve_full_time(deepcopy(c["shift"]), state["floors"])
         validate_row(row, period, floor_ids)
         if not any(e["id"] == row["employeeId"] for e in state["employees"]):
             raise RuleError("従業員を選択してください。")

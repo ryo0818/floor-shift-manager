@@ -10,5 +10,5 @@ export function dragShift(shift: Shift, deltaMinutes: number, mode: DragMode): S
     start += offset; end += offset;
   } else if (mode === "start") start = clamp(start + delta, 0, end - 15);
   else end = clamp(end + delta, start + 15, 1425);
-  return { ...shift, start: time(start), end: time(end) };
+  return { ...shift, start: time(start), end: time(end), ...(start !== minutes(shift.start) || end !== minutes(shift.end) ? {fullTime:false} : {}) };
 }

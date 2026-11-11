@@ -31,3 +31,18 @@ test('入力途中を明示し、締切後は入力欄と削除を無効化',()=
  assert.match(html,/終了を開始より後/);assert.match(html,/<fieldset[^>]*disabled=""/);
  assert.match(html,/<button type="button" disabled="" class="text-btn"/);
 });
+test('時間指定の開始候補は10:00から15分刻み、未入力では希望を作成しない',()=>{
+ const html=render({});
+ const start=html.match(/<select[^>]*希望1 開始[^>]*>(.*?)<\/select>/)[1];
+ assert.doesNotMatch(start,/value="09:/);
+ assert.match(start,/value="10:00"/); assert.match(start,/value="10:15"/);
+ assert.match(html,/フルタイム/); assert.match(html,/未入力：休み希望/);
+});
+test('フルタイムでは開始・終了を無効化し、過去日のロックも維持',()=>{
+ const row={id:'a',date:base.date,start:'09:00',end:'17:00',floorId:'f1',note:'',fullTime:true};
+ const html=render({rows:[row]});
+ assert.match(html,/type="checkbox" checked=""/);
+ assert.match(html,/<select[^>]*希望1 開始[^>]*disabled=""/);
+ assert.match(html,/<select[^>]*希望1 終了[^>]*disabled=""/);
+ assert.match(render({rows:[row],past:true}),/<fieldset[^>]*disabled=""/);
+});
