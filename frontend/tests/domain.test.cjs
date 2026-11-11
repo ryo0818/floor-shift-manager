@@ -48,3 +48,17 @@ test('従業員削除：未使用のみ削除、他期間の履歴と従業員�
  assert.deepEqual(d.readDemo(other),before);
  d.demoEmployee('e1');assert.throws(()=>d.commandDemo(id,{type:'deleteEmployee',id:'e2'}),/管理者のみ/);
 });
+test('フルタイムはフロアの時間で保存・提出し、ドラッグすると時間指定に戻る',()=>{
+ const {m,d,drag}=setup();const id=m.movePeriod(m.periodOf(m.today()),2);
+ d.demoLogin('admin','demo1234');
+ d.commandDemo(id,{type:'saveFloor',floor:{id:'f1',name:'ホール',color:'#123456',workStart:'08:30',workEnd:'19:00'}});
+ d.demoEmployee('e1');
+ const row={id:'full',date:id,start:'10:00',end:'17:00',floorId:'f1',note:'',fullTime:true};
+ d.commandDemo(id,{type:'saveDraft',rows:[row],note:''});
+ d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});
+ assert.equal(d.readDemo(id).submissions[0].submittedRows[0].start,'08:30');
+ d.demoLogin('admin','demo1234');const shift=d.readDemo(id).shifts[0];
+ assert.equal(shift.end,'19:00');assert.equal(drag.dragShift(shift,15,'end').fullTime,false);
+ assert.equal(drag.dragShift(shift,0,'end').fullTime,true);
+ assert.equal(m.resolveFullTime({...row,fullTime:false},[]).start,'10:00');
+});

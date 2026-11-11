@@ -23,7 +23,7 @@ export function Picker({
 }: {
   value: string;
   onChange: (v: string) => void;
-  items: { id: string; name: string }[];
+  items: { id: string; name: string; disabled?: boolean }[];
   label: string;
   disabled?: boolean;
 }) {
@@ -34,7 +34,7 @@ export function Picker({
       </SelectTrigger>
       <SelectContent>
         {items.map((x) => (
-          <SelectItem key={x.id} value={x.id}>
+          <SelectItem key={x.id} value={x.id} disabled={x.disabled}>
             {x.name}
           </SelectItem>
         ))}

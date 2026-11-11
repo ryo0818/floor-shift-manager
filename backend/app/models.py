@@ -23,6 +23,7 @@ class Row(StrictModel):
     end: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")]
     floorId: Id
     note: Annotated[str, Field(max_length=500)] = ""
+    fullTime: bool = False
 
 
 class ShiftInput(Row):
@@ -33,6 +34,8 @@ class Floor(StrictModel):
     id: Id
     name: Name
     color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
+    workStart: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")] = "09:00"
+    workEnd: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")] = "17:00"
 
 
 class Employee(StrictModel):
