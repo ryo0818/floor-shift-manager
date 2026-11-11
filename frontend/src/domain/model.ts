@@ -51,7 +51,7 @@ export type Command =
     }
   | { type: "deleteShift"; id: string }
   | { type: "setStatus"; ids: string[]; status: Status }
-  | { type: "setDeadline"; deadline: string }
+  | { type: "setDeadline"; deadline: string | null }
   | { type: "deleteEmployee"; id: string }
   | { type: "deleteFloor"; id: string }
   | { type: "saveFloor"; floor: Floor }
@@ -61,9 +61,9 @@ export const statusNames: Record<Status, string> = {
   confirmed: "確定済み",
   declined: "見送り",
 };
-export const today = () =>
+export const today = (now = Date.now()) =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
-    new Date(),
+    new Date(now),
   );
 export function periodOf(date: string): string {
   return date.slice(0, 7) + (Number(date.slice(8)) <= 15 ? "-01" : "-16");
@@ -105,7 +105,7 @@ export const minutes = (s: string) =>
   Number(s.slice(0, 2)) * 60 + Number(s.slice(3));
 export const duration = (r: Row) => (minutes(r.end) - minutes(r.start)) / 60;
 export const expired = (p: Period, now = Date.now()) =>
-  !p.deadline || now >= Date.parse(p.deadline);
+  p.end < today(now) || (p.deadline !== null && now >= Date.parse(p.deadline));
 export const times = Array.from(
   { length: 96 },
   (_, i) =>

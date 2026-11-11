@@ -34,12 +34,12 @@ Reactの `src/domain/model.ts` のWorkspaceに、全体の更新番号 `revision
 
 | type | 追加の入力 | 権限 |
 | --- | --- | --- |
-| saveDraft | rows、note | 従業員本人、締切前 |
-| submit | acknowledgeOverlap | 従業員本人、締切前 |
+| saveDraft | rows、note | 従業員本人、今日以降。締切がある場合はその前 |
+| submit | acknowledgeOverlap | 従業員本人、今日以降。締切がある場合はその前 |
 | saveShift | shift、acknowledgeOverlap | 管理者 |
 | deleteShift | id | 管理者、未確定のみ |
 | setStatus | ids、status | 管理者 |
-| setDeadline | deadline | 管理者 |
+| setDeadline | deadline（nullで解除） | 管理者 |
 | saveFloor | floor | 管理者 |
 | deleteFloor | id | 管理者。全期間の使用確認後に削除・割り当て解除 |
 | saveEmployee | employee | 管理者 |

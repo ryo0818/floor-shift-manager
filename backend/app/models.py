@@ -76,7 +76,7 @@ class SetStatus(CommandBase):
 
 class SetDeadline(CommandBase):
     type: Literal["setDeadline"]
-    deadline: Annotated[str, Field(min_length=1, max_length=50)]
+    deadline: Annotated[str, Field(min_length=1, max_length=50)] | None
 
 
 class SaveFloor(CommandBase):
