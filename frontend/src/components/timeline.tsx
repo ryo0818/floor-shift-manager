@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   minutes,
+  initialDisplayDate,
   headcount,
   daysOf,
   statusNames,
@@ -38,7 +39,7 @@ export function Timeline({
 }) {
   const [detail, setDetail] = useState<string | null>(null);
   const days = daysOf(data.period);
-  const day = days.includes(date) ? date : days[0];
+  const day = days.includes(date) ? date : initialDisplayDate(data.period);
   const active = data.shifts.find((s) => s.id === detail);
   const name = (id: string) =>
     data.employees.find((e) => e.id === id)?.name || "未登録";

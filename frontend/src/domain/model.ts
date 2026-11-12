@@ -167,3 +167,11 @@ export function headcount(rows: Shift[], start?: number, end?: number) {
       .map((s) => s.employeeId),
   ).size;
 }
+
+export function initialDisplayDate(period: Period, currentDate = today()): string {
+  return currentDate >= period.start && currentDate <= period.end ? currentDate : period.start;
+}
+export function adminListShifts(shifts: Shift[], period: Period, fromToday: boolean, currentDate = today()): Shift[] {
+  // Historical half-months remain accessible in full.
+  return fromToday && period.end >= currentDate ? shifts.filter(s => s.date >= currentDate) : shifts;
+}

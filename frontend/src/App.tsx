@@ -40,6 +40,7 @@ import {
 import { Picker, EmptyState, CheckBox } from "./components/controls";
 import { Accounts, PasswordChange } from "./components/accounts";
 import { InlineDay } from "./components/inline-day";
+import { printPeriod } from "./domain/period-print";
 import { Timeline } from "./components/timeline";
 import { ShiftEditor, MasterEditor } from "./components/editors";
 import { api, DEMO } from "./data/api";
@@ -53,6 +54,8 @@ import {
   Status,
   Submission,
   Workspace,
+  initialDisplayDate,
+  adminListShifts,
   conflicts,
   overlaps,
   validateRow,
@@ -267,7 +270,8 @@ export default function App() {
     [rows, setRows] = useState<Row[]>([]),
     [note, setNote] = useState(""),
     [dirty, setDirty] = useState(false),
-    [timelineDate, setTimelineDate] = useState(""),
+    [timelineDate, setTimelineDate] = useState(today()),
+    [fromToday, setFromToday] = useState(true),
     [boardMode, setBoardMode] = useState("list"),
     [clock, setClock] = useState(Date.now());
   const [accountsTarget, setAccountsTarget] = useState<string | null>(null);
@@ -291,6 +295,7 @@ export default function App() {
       const d = await api.load(period);
       if (seq !== sequence.current) return;
       setData(d);
+      setTimelineDate(previous => previous >= d.period.start && previous <= d.period.end ? previous : initialDisplayDate(d.period));
       setDeadline(jstInput(d.period.deadline));
       const own = d.submissions.find(
         (s) => s.employeeId === session.employeeId,
@@ -329,6 +334,8 @@ export default function App() {
         : periodOf(today()),
     );
     setTab("board");
+    setTimelineDate(today());
+    setFromToday(true);
     setError("");
   };
   const run = async (c: Command, msg = "保存しました") => {
@@ -595,7 +602,7 @@ export default function App() {
               <>
                 {tab === "board" &&
                   (() => {
-                    const visible = data.shifts
+                    const matching = data.shifts
                       .filter(
                         (s) =>
                           (floor === "all" || s.floorId === floor) &&
@@ -610,6 +617,7 @@ export default function App() {
                           a.date.localeCompare(b.date) ||
                           a.start.localeCompare(b.start),
                       );
+                    const visible = boardMode === "list" ? adminListShifts(matching, data.period, fromToday, today(clock)) : matching;
                     const pending = visible.filter(
                       (s) => s.status === "pending",
                     );
@@ -694,7 +702,7 @@ export default function App() {
                             </div>
                             <Tabs
                               value={boardMode}
-                              onValueChange={setBoardMode}
+                              onValueChange={(value) => { setBoardMode(value); setSelected([]); }}
                             >
                               <TabsList>
                                 <TabsTrigger value="list">一覧</TabsTrigger>
@@ -736,6 +744,12 @@ export default function App() {
                             </div>
                           </div>
                           <div className="filter-row">
+                            {boardMode === "list" && <Picker label="表示日付" value={fromToday ? "today" : "all"} onChange={value => { setFromToday(value === "today"); setSelected([]); }} items={[{id:"today",name:"今日以降（過去の半月は全体）"},{id:"all",name:"半月全体"}]}/>}
+                            {boardMode === "grid" && <button className="btn secondary" disabled={busy || !data.floors.length} onClick={() => {
+                              try { printPeriod(data, matching, floor, `${filter === "all" ? "すべての状態" : statusNames[filter as Status]}${search ? ` / 氏名検索：${search}` : ""}`); }
+                              catch(e) { setError((e as Error).message); }
+                            }}>半月表をPDFに保存</button>}
+
                             <input
                               aria-label="従業員名で検索"
                               placeholder="従業員名で検索"
@@ -869,6 +883,7 @@ export default function App() {
                                                   key={s.id}
                                                   onClick={() => {
                                                     setBoardMode("list");
+                                                    setFromToday(false);
                                                     setSearch(e.name);
                                                     setSelected([]);
                                                   }}
