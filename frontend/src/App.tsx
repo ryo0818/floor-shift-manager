@@ -41,12 +41,15 @@ import { Picker, EmptyState, CheckBox } from "./components/controls";
 import { Accounts, PasswordChange } from "./components/accounts";
 import { InlineDay } from "./components/inline-day";
 import { printPeriod } from "./domain/period-print";
+import { FloorOrder } from "./components/floor-order";
+import { PeriodGrid } from "./components/period-grid";
 import { Timeline } from "./components/timeline";
 import { ShiftEditor, MasterEditor } from "./components/editors";
 import { api, DEMO } from "./data/api";
 import {
   Command,
   Employee,
+  employmentNames,
   Floor,
   Row,
   Session,
@@ -274,6 +277,7 @@ export default function App() {
     [fromToday, setFromToday] = useState(true),
     [boardMode, setBoardMode] = useState("list"),
     [clock, setClock] = useState(Date.now());
+  const [orderFloor, setOrderFloor] = useState<Floor | null>(null);
   const [accountsTarget, setAccountsTarget] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
   const sequence = useRef(0);
@@ -631,16 +635,6 @@ export default function App() {
                     const canConfirm =
                       data.policy.allowEarlyConfirm ||
                       !data.period.deadline || clock >= Date.parse(data.period.deadline);
-                    const cell = (s: Shift) => (
-                      <>
-                        <div className="row-time">
-                          {s.start}–{s.end}
-                        </div>
-                        <span className={`status ${s.status}`}>
-                          {statusNames[s.status]}
-                        </span>
-                      </>
-                    );
                     return (
                       <>
                         <div className="summary">
@@ -846,66 +840,7 @@ export default function App() {
                               </p>
                             </EmptyState>
                           ) : boardMode === "grid" ? (
-                            <div className="grid-wrap">
-                              <Table className="period-table">
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>従業員</TableHead>
-                                    {daysOf(data.period).map((d) => (
-                                      <TableHead key={d}>
-                                        {shortDate(d)}
-                                        <small>{dayName(d)}</small>
-                                      </TableHead>
-                                    ))}
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {data.employees
-                                    .filter((e) =>
-                                      visible.some(
-                                        (s) => s.employeeId === e.id,
-                                      ),
-                                    )
-                                    .map((e) => (
-                                      <TableRow key={e.id}>
-                                        <TableCell>{e.name}</TableCell>
-                                        {daysOf(data.period).map((d) => (
-                                          <TableCell key={d}>
-                                            {visible
-                                              .filter(
-                                                (s) =>
-                                                  s.employeeId === e.id &&
-                                                  s.date === d,
-                                              )
-                                              .map((s) => (
-                                                <button
-                                                  className={`grid-shift ${s.status}`}
-                                                  key={s.id}
-                                                  onClick={() => {
-                                                    setBoardMode("list");
-                                                    setFromToday(false);
-                                                    setSearch(e.name);
-                                                    setSelected([]);
-                                                  }}
-                                                >
-                                                  <small>
-                                                    {
-                                                      data.floors.find(
-                                                        (f) =>
-                                                          f.id === s.floorId,
-                                                      )?.name
-                                                    }
-                                                  </small>
-                                                  {cell(s)}
-                                                </button>
-                                              ))}
-                                          </TableCell>
-                                        ))}
-                                      </TableRow>
-                                    ))}
-                                </TableBody>
-                              </Table>
-                            </div>
+                            <PeriodGrid data={data} visible={visible} onSelect={(employeeId,floorId)=>{setBoardMode("list");setFromToday(false);setFloor(floorId);setSearch(data.employees.find(e=>e.id===employeeId)?.name ?? "");setSelected([]);}}/>
                           ) : (
                             <div className="floor-sections">
                               {data.floors
@@ -1268,6 +1203,7 @@ export default function App() {
                             {f.name}
                           </span>
                           <div className="floor-actions">
+                          <button className="text-btn" disabled={busy} onClick={()=>setOrderFloor(f)}>従業員の並び順</button>
                           <button className="text-btn" disabled={busy}
                             aria-label={`${f.name}を削除`}
                             onClick={()=>setConfirm({
@@ -1307,6 +1243,7 @@ export default function App() {
                         <TableHeader>
                           <TableRow>
                             <TableHead>氏名</TableHead>
+                            <TableHead>区分</TableHead>
                             <TableHead>勤務可能フロア</TableHead>
                             <TableHead />
                           </TableRow>
@@ -1315,6 +1252,7 @@ export default function App() {
                           {data.employees.map((e) => (
                             <TableRow key={e.id}>
                               <TableCell>{e.name}</TableCell>
+                              <TableCell>{employmentNames[e.employmentType ?? "partTime"]}</TableCell>
                               <TableCell>
                                 <div className="assignment-chips">
                                   {e.floorIds.map((id) => (
@@ -1433,7 +1371,7 @@ export default function App() {
                       )}
                       <section className="employee-days">
                         {daysOf(data.period).map((d) => (
-                          <InlineDay key={d} date={d} rows={rows.filter(r=>r.date===d)}
+                          <InlineDay key={d} date={d} employmentType={data.employees.find(e=>e.id===session.employeeId)?.employmentType} rows={rows.filter(r=>r.date===d)}
                             floors={data.floors} period={data.period} disabled={locked || busy} past={d < currentDate}
                             onChange={row=>{
                               if(expired(data.period) || d < today() || busy) return;
@@ -1503,6 +1441,7 @@ export default function App() {
                                   (editableRows.length
                                     ? `今日以降の希望${editableRows.length}件を提出します。空欄の日は休み希望です。`
                                     : "今日以降をすべて休み希望として提出します。") +
+                                  (s?.submittedAt ? "\n変更した希望は未確定に戻ります。変更のない確定シフトは維持され、削除した希望に対応する今日以降のシフトは取り消されます。" : "") +
                                   (pairs.length
                                     ? "\n希望時間の重複があります。確認のうえ、このまま提出します。\n" +
                                       pairs
@@ -1581,6 +1520,7 @@ export default function App() {
         />
       )}
       {accountsTarget !== null && data && session?.role === "admin" && <Accounts employees={data.employees} initialEmployeeId={accountsTarget} close={()=>setAccountsTarget(null)} />}
+      {orderFloor && data && session?.role === "admin" && <FloorOrder floor={orderFloor} employees={data.employees} busy={busy} onClose={()=>setOrderFloor(null)} onSave={async floor=>{await run({type:"saveFloor",floor},"表示順を保存しました");}}/>}
       {master && data && (
         <MasterEditor
           {...master}

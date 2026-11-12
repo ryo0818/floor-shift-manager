@@ -6,8 +6,10 @@ export type Session = {
   csrfToken?: string;
   mustChangePassword?: boolean;
 };
-export type Floor = { id: string; name: string; color: string; workStart?: string; workEnd?: string };
-export type Employee = { id: string; name: string; floorIds: string[] };
+export type EmploymentType = "partTime" | "staff";
+export const employmentNames: Record<EmploymentType, string> = {partTime:"アルバイト",staff:"社員"};
+export type Floor = { id: string; name: string; color: string; workStart?: string; workEnd?: string; staffWorkStart?: string | null; staffWorkEnd?: string | null; employeeOrder?: string[] };
+export type Employee = { id: string; name: string; floorIds: string[]; employmentType?: EmploymentType };
 export type Status = "pending" | "confirmed" | "declined";
 export type Row = {
   id: string;
@@ -124,11 +126,11 @@ export function fullTimeNote(note: string, fullTime: boolean) {
   if (fullTime) lines.push("[フルタイム]");
   return lines.join("\n").replace(/^\n+|\n+$/g, "");
 }
-export function floorHours(floor?: Floor) {
-  return { start: floor?.workStart ?? "09:00", end: floor?.workEnd ?? "17:00" };
+export function floorHours(floor?: Floor, employmentType: EmploymentType = "partTime") {
+  return { start: (employmentType === "staff" ? floor?.staffWorkStart : null) ?? floor?.workStart ?? "09:00", end: (employmentType === "staff" ? floor?.staffWorkEnd : null) ?? floor?.workEnd ?? "17:00" };
 }
-export function resolveFullTime<T extends Row>(row: T, floors: Floor[]): T {
-  return { ...row, ...(row.fullTime ? floorHours(floors.find(f => f.id === row.floorId)) : {}), note: fullTimeNote(row.note, !!row.fullTime) };
+export function resolveFullTime<T extends Row>(row: T, floors: Floor[], employmentType: EmploymentType = "partTime"): T {
+  return { ...row, ...(row.fullTime ? floorHours(floors.find(f => f.id === row.floorId), employmentType) : {}), note: fullTimeNote(row.note, !!row.fullTime) };
 }
 export function overlaps(a: Row, b: Row) {
   return (
@@ -174,4 +176,9 @@ export function initialDisplayDate(period: Period, currentDate = today()): strin
 export function adminListShifts(shifts: Shift[], period: Period, fromToday: boolean, currentDate = today()): Shift[] {
   // Historical half-months remain accessible in full.
   return fromToday && period.end >= currentDate ? shifts.filter(s => s.date >= currentDate) : shifts;
+}
+
+export function orderedEmployees(employees: Employee[], floor?: Floor): Employee[] {
+  const order = new Map((floor?.employeeOrder ?? []).map((id, index) => [id, index]));
+  return [...employees].sort((a,b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
 }

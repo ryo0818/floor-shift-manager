@@ -59,3 +59,7 @@ test('ガントバーにホバー不要のフルタイム表示を含める',()=
  assert.match(html,/<strong class="full-time-badge">フルタイム/);
  assert.match(html,/aria-label="従業員 フルタイム/);
 });
+test('初期時刻だけの日は休み予定、希望行がある日は勤務予定と表示する',()=>{
+ assert.match(render({}),/希望：<\/small>休み予定/);
+ assert.match(render({rows:[{id:'r1',date:'2030-04-01',floorId:'f1',start:'18:00',end:'19:00',note:''}]}),/希望：<\/small>勤務予定/);
+});

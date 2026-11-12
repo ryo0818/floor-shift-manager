@@ -73,3 +73,20 @@ def test_full_time_note_length_does_not_silently_truncate():
     r = {**row(fullTime=True), "note": "あ" * 500}
     with pytest.raises(RuleError, match="500文字"):
         apply(s, EMPLOYEE, dict(type="saveDraft", rows=[r], note=""), NOW)
+
+
+def test_resubmission_preserves_manual_adjustments_and_removes_withdrawn_request():
+    s = state()
+    a, b = row(), {**row(), "id":"r2", "date":"2030-04-03"}
+    apply(s, EMPLOYEE, dict(type="saveDraft", rows=[a,b], note=""), NOW)
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    first, second = s["shifts"]
+    first.update(start="11:00", status="confirmed")
+    second["status"] = "confirmed"
+    manual = {**row(), "id":"manual", "employeeId":"e1", "date":"2030-04-04"}
+    apply(s, ADMIN, dict(type="saveShift", shift=manual, acknowledgeOverlap=False), NOW)
+    apply(s, EMPLOYEE, dict(type="saveDraft", rows=[a], note="全体のメモだけ変更"), NOW)
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    assert {r["id"] for r in s["shifts"]} == {first["id"],"manual"}
+    preserved = next(r for r in s["shifts"] if r["id"]==first["id"])
+    assert preserved["start"] == "11:00" and preserved["status"] == "confirmed"

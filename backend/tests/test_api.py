@@ -281,7 +281,7 @@ def test_atomic_confirmation_existing_conflict_and_state_transition(system):
             "setDeadline",
             deadline=(datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
         ).status_code
-        == 409
+        == 200
     )
     ok(c, "setStatus", ids=["a"], status="pending")
     ok(c, "setStatus", ids=["a"], status="declined")
@@ -724,3 +724,52 @@ def test_six_character_password_change_and_cli_create(system):
         with pytest.raises(Exception, match="6〜256"):
             auth.create_account(con, "cli-six", "abc12", "employee", "cli-six")
         auth.create_account(con, "cli-six", "abc123", "employee", "cli-six")
+
+
+def test_employee_types_floor_order_and_changed_confirmation(system):
+    app, path, admin = system
+    login(admin)
+    ok(admin, "setDeadline", deadline=None)
+    floor = next(f for f in workspace(admin)["floors"] if f["id"] == "f1")
+    floor.update(workStart="18:00", workEnd="22:00", staffWorkStart="09:00", staffWorkEnd="18:00", employeeOrder=["e2", "e1"])
+    ok(admin, "saveFloor", floor=floor)
+    employee = next(e for e in workspace(admin)["employees"] if e["id"] == "e1")
+    ok(admin, "saveEmployee", employee={**employee, "employmentType":"staff"})
+    assert next(f for f in workspace(admin)["floors"] if f["id"] == "f1")["employeeOrder"] == ["e2", "e1"]
+    with TestClient(app) as client:
+        login(client, "employee1")
+        assert command(client, "saveEmployee", employee={**employee, "employmentType":"partTime"}).status_code == 403
+        assert all("employeeOrder" not in f for f in workspace(client)["floors"])
+        first, second = row(fullTime=True), row("r2", date="2030-04-04")
+        ok(client, "saveDraft", rows=[first,second], note="")
+        saved = workspace(client)["submissions"][0]["draftRows"]
+        assert (saved[0]["start"],saved[0]["end"]) == ("09:00","18:00")
+        ok(client, "submit", acknowledgeOverlap=False)
+        shifts = workspace(admin)["shifts"]
+        ok(admin, "setStatus", ids=[s["id"] for s in shifts], status="confirmed")
+        # Saving a private draft does not modify the published schedule.
+        edited = [{**saved[0], "fullTime":False, "start":"10:00"},saved[1]]
+        ok(client, "saveDraft", rows=edited, note="変更")
+        assert all(s["status"] == "confirmed" for s in workspace(admin)["shifts"])
+        ok(client, "submit", acknowledgeOverlap=False)
+        after = {s["original"]["id"]:s for s in workspace(admin)["shifts"]}
+        assert after["r1"]["status"] == "pending"
+        assert after["r1"]["start"] == "10:00"
+        assert after["r2"]["status"] == "confirmed"
+        assert {s["id"] for s in shifts} == {s["id"] for s in after.values()}
+        ok(client, "submit", acknowledgeOverlap=False)
+        assert next(s for s in workspace(admin)["shifts"] if s["original"]["id"] == "r2")["status"] == "confirmed"
+
+
+def test_floor_order_validation_and_assignment_cleanup(system):
+    _, _, admin = system
+    login(admin)
+    floor = next(f for f in workspace(admin)["floors"] if f["id"] == "f1")
+    for ids in (["e1","e1"], ["missing"]):
+        assert command(admin, "saveFloor", floor={**floor,"employeeOrder":ids}).status_code == 400
+    assert command(admin, "saveFloor", floor={**floor,"staffWorkStart":"20:00","staffWorkEnd":"10:00"}).status_code == 400
+    ok(admin, "saveFloor", floor={**floor,"employeeOrder":["e2","e1"]})
+    employee = next(e for e in workspace(admin)["employees"] if e["id"] == "e1")
+    ok(admin, "saveEmployee", employee={**employee,"floorIds":["f2"]})
+    assert next(f for f in workspace(admin)["floors"] if f["id"] == "f1")["employeeOrder"] == ["e2"]
+    assert command(admin, "saveEmployee", employee={**employee,"employmentType":"unknown"}).status_code == 422

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { defaultShiftTimes, timeSelection, startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type Row, type Floor, type Period } from "../domain/model";
-export function InlineDay({ date, rows, floors, period, disabled, past = false, onChange, onRemove }: {
-  date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; past?: boolean;
+import { defaultShiftTimes, timeSelection, startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
+export function InlineDay({ date, rows, floors, period, disabled, employmentType = "partTime", past = false, onChange, onRemove }: {
+  date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; employmentType?: EmploymentType; past?: boolean;
   onChange: (r: Row) => void; onRemove: (r: Row) => void;
 }) {
   const [emptyId] = useState(()=>`day-${date}`);
@@ -10,13 +10,13 @@ export function InlineDay({ date, rows, floors, period, disabled, past = false, 
   const displayed = rows.length ? rows : past ? [] : [placeholder];
   const locked = disabled || past;
   return <article className="day-card">
-    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>{dayName(date)}</span></h2></div>
+    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>{dayName(date)}</span></h2><span role="status" className={`day-plan ${rows.length ? "work" : "rest"}`}><small>希望：</small>{rows.length ? "勤務予定" : "休み予定"}</span></div>
     {displayed.map((row, index)=>{
       const real = rows.some(r=>r.id===row.id);
       let error="";
       if(real && !past) {try{validateRow(row,period,floors.map(f=>f.id));}catch(e){error=(e as Error).message;}}
       const overlap = real && !past && conflicts(rows).some(p=>p.a.id===row.id || p.b.id===row.id);
-      const change=(patch: Partial<Row>)=>onChange(resolveFullTime({...row,...patch}, floors));
+      const change=(patch: Partial<Row>)=>onChange(resolveFullTime({...row,...patch}, floors, employmentType));
       return <div key={row.id}><fieldset className="inline-shift" disabled={locked || !floors.length}>
         <legend>希望 {index+1}</legend>
         <label>フロア<select aria-label={`${shortDate(date)} 希望${index+1} フロア`} value={row.floorId} disabled={floors.length===1 && row.floorId===floors[0].id} onChange={e=>change({floorId:e.target.value})}>

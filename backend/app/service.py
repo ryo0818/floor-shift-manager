@@ -70,12 +70,18 @@ def validate_row(row, period, allowed):
         raise RuleError("選択できないフロアです。割り当てを確認してください。")
 
 
-def resolve_full_time(row, floors):
+def normalized_request(row):
+    return {**row, "fullTime": row.get("fullTime", False)}
+
+
+def resolve_full_time(row, floors, employee=None):
     if row.get("fullTime"):
         floor = next((f for f in floors if f["id"] == row["floorId"]), None)
         if floor is None:
             raise RuleError("選択できないフロアです。")
-        row.update(start=floor.get("workStart", "09:00"), end=floor.get("workEnd", "17:00"))
+        staff = (employee or {}).get("employmentType") == "staff"
+        row.update(start=(floor.get("staffWorkStart") if staff else None) or floor.get("workStart", "09:00"),
+                   end=(floor.get("staffWorkEnd") if staff else None) or floor.get("workEnd", "17:00"))
     if not row.get("fullTime") and "[フルタイム]" not in row.get("note", "").split("\n"):
         return row
     lines = [line for line in row.get("note", "").split("\n") if line != "[フルタイム]"]
@@ -101,7 +107,7 @@ def project(state, user, revision):
         "floors": deepcopy(
             state["floors"]
             if admin
-            else [f for f in state["floors"] if f["id"] in allowed]
+            else [{k:v for k,v in f.items() if k != "employeeOrder"} for f in state["floors"] if f["id"] in allowed]
         ),
         "employees": deepcopy(state["employees"] if admin else own),
         "period": deepcopy(state["period"]),
@@ -152,7 +158,7 @@ def apply(state, user, c, now=None):
                     if original is None or {**original, "fullTime": original.get("fullTime", False)} != {**row, "fullTime": row.get("fullTime", False)}:
                         raise RuleError("過去日の希望は入力・変更できません。", 409)
                     continue
-                resolve_full_time(row, state["floors"])
+                resolve_full_time(row, state["floors"], employee)
                 validate_row(
                     row, period, [f for f in employee["floorIds"] if f in floor_ids]
                 )
@@ -170,50 +176,48 @@ def apply(state, user, c, now=None):
             raise RuleError(
                 "重複する希望があります。確認してから提出してください。", 409
             )
-        if any(
-            s["employeeId"] == employee["id"] and s["date"] >= today and s["status"] != "pending"
-            for s in shifts
-        ):
-            raise RuleError(
-                "管理者が処理済みのシフトがあります。再提出は管理者にご相談ください。",
-                409,
-            )
+        previous_ids = {r["id"] for r in submission["submittedRows"]}
+        previous = {s["original"]["id"]: s for s in shifts
+                    if s["employeeId"] == employee["id"] and s.get("original", {}).get("id") in previous_ids}
+        keep = [s for s in shifts if s["employeeId"] != employee["id"] or s["date"] < today
+                or s.get("original", {}).get("id") not in previous_ids]
+        updated = []
+        for row in editable_drafts:
+            old = previous.get(row["id"])
+            if old and old["date"] < today:
+                # An administrator may have moved an original future request into the past.
+                if normalized_request(row) != normalized_request(old["original"]):
+                    raise RuleError("過去日の勤務に対応する希望は変更できません。", 409)
+                continue
+            if old and normalized_request(row) == normalized_request(old["original"]):
+                updated.append(old)
+            else:
+                updated.append({**deepcopy(row), "id": old["id"] if old else str(uuid.uuid4()),
+                                "employeeId": employee["id"], "status": "pending", "original": deepcopy(row)})
         submission.update(
             submittedRows=deepcopy([*(r for r in submission["submittedRows"] if r["date"] < today), *editable_drafts]),
             submittedNote=submission["draftNote"],
             submittedAt=now.isoformat(),
             dirty=False,
         )
-        # Server-generated management IDs prevent a client row ID from colliding with another person's shift.
-        state["shifts"] = [s for s in shifts if s["employeeId"] != employee["id"] or s["date"] < today] + [
-            {
-                **deepcopy(r),
-                "id": str(uuid.uuid4()),
-                "employeeId": employee["id"],
-                "status": "pending",
-                "original": deepcopy(r),
-            }
-            for r in editable_drafts
-        ]
+        state["shifts"] = keep + updated
         return
     if user["role"] != "admin":
         raise RuleError("管理者のみ操作できます。", 403)
     if kind == "setDeadline":
         deadline = instant(c["deadline"]) if c["deadline"] is not None else None
-        was_closed = period["deadline"] and instant(period["deadline"]) <= now
-        if (deadline is None or deadline > now) and was_closed and any(
-            s["status"] != "pending" and s["date"] >= today for s in shifts
-        ):
-            raise RuleError(
-                "確定・見送り済みがあります。未確定に戻してから受付を再開してください。",
-                409,
-            )
         period["deadline"] = deadline.isoformat() if deadline else None
     elif kind == "saveFloor":
         f = deepcopy(c["floor"])
         f["name"] = f["name"].strip()
         if f.get("workStart", "09:00") >= f.get("workEnd", "17:00"):
             raise RuleError("フルタイムの終了は開始より後にしてください。")
+        if (f.get("staffWorkStart") or f.get("workStart", "09:00")) >= (f.get("staffWorkEnd") or f.get("workEnd", "17:00")):
+            raise RuleError("社員のフルタイムの終了は開始より後にしてください。")
+        order = f.get("employeeOrder", [])
+        assigned = {e["id"] for e in state["employees"] if f["id"] in e["floorIds"]}
+        if len(order) != len(set(order)) or any(id_ not in assigned for id_ in order):
+            raise RuleError("並び順にはこのフロアに割り当てた従業員を重複なく指定してください。")
         if not f["name"]:
             raise RuleError("フロア名を入力してください。")
         if any(x["id"] != f["id"] and x["name"] == f["name"] for x in state["floors"]):
@@ -227,9 +231,12 @@ def apply(state, user, c, now=None):
         if any(f not in floor_ids for f in e["floorIds"]):
             raise RuleError("フロアを確認してください。")
         e["floorIds"] = list(dict.fromkeys(e["floorIds"]))
+        for floor in state["floors"]:
+            if floor["id"] not in e["floorIds"] and "employeeOrder" in floor:
+                floor["employeeOrder"] = [id_ for id_ in floor["employeeOrder"] if id_ != e["id"]]
         state["employees"] = [x for x in state["employees"] if x["id"] != e["id"]] + [e]
     elif kind == "saveShift":
-        row = resolve_full_time(deepcopy(c["shift"]), state["floors"])
+        row = resolve_full_time(deepcopy(c["shift"]), state["floors"], next((e for e in state["employees"] if e["id"] == c["shift"]["employeeId"]), None))
         validate_row(row, period, floor_ids)
         if not any(e["id"] == row["employeeId"] for e in state["employees"]):
             raise RuleError("従業員を選択してください。")
@@ -334,3 +341,6 @@ def delete_employee(state, user, employee_id, all_periods):
                for row in bucket.get("shifts", []) + bucket.get("submissions", [])):
             raise RuleError("この従業員にはシフト・希望の提出履歴・保存済み下書きがあるため削除できません。全日休みの提出を含む、過去・未来の全期間が対象です。", 409)
     state["employees"] = [e for e in state["employees"] if e["id"] != employee_id]
+    for floor in state["floors"]:
+        if "employeeOrder" in floor:
+            floor["employeeOrder"] = [id_ for id_ in floor["employeeOrder"] if id_ != employee_id]
