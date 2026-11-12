@@ -53,3 +53,23 @@ def test_legacy_past_draft_accepts_default_false_without_modification():
     assert s["submissions"][0]["draftRows"] == [past]
     with pytest.raises(RuleError, match="過去日"):
         apply(s, EMPLOYEE, dict(type="saveDraft", rows=[{**past,"fullTime":True}], note=""), later)
+
+def test_full_time_note_is_added_once_and_removed_without_losing_user_note():
+    s = state()
+    r = {**row(fullTime=True), "employeeId": "e1", "note": "相談あり"}
+    apply(s, ADMIN, dict(type="saveShift", shift=r, acknowledgeOverlap=False), NOW)
+    saved = s["shifts"][0]
+    assert saved["note"] == "相談あり\n[フルタイム]"
+    r["note"] = saved["note"]
+    apply(s, ADMIN, dict(type="saveShift", shift=r, acknowledgeOverlap=False), NOW)
+    assert s["shifts"][0]["note"] == r["note"]
+    r["fullTime"] = False
+    apply(s, ADMIN, dict(type="saveShift", shift=r, acknowledgeOverlap=False), NOW)
+    assert s["shifts"][0]["note"] == "相談あり"
+
+
+def test_full_time_note_length_does_not_silently_truncate():
+    s = state()
+    r = {**row(fullTime=True), "note": "あ" * 500}
+    with pytest.raises(RuleError, match="500文字"):
+        apply(s, EMPLOYEE, dict(type="saveDraft", rows=[r], note=""), NOW)

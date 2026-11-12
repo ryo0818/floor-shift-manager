@@ -62,3 +62,18 @@ test('フルタイムはフロアの時間で保存・提出し、ドラッグ�
  assert.equal(drag.dragShift(shift,0,'end').fullTime,true);
  assert.equal(m.resolveFullTime({...row,fullTime:false},[]).start,'10:00');
 });
+test('時間指定は18:00初期値、開始選択で15分後を設定し日をまたがない',()=>{
+ const {m}=setup();
+ assert.deepEqual(m.defaultShiftTimes,{start:'18:00',end:'18:15'});
+ assert.deepEqual(m.timeSelection('18:45'),{start:'18:45',end:'19:00'});
+ assert.deepEqual(m.timeSelection('23:30'),{start:'23:30',end:'23:45'});
+ assert.ok(!m.startTimes.includes('23:45'));
+});
+test('フルタイムのメモは重複せず解除・ドラッグで自動表示だけを削除',()=>{
+ const {m,drag}=setup();const row={id:'x',date:'2030-04-01',start:'18:00',end:'18:15',floorId:'f1',note:'相談あり',fullTime:true};
+ const full=m.resolveFullTime(row,[]);
+ assert.equal(full.note,'相談あり\n[フルタイム]');
+ assert.equal(m.resolveFullTime(full,[]).note,full.note);
+ assert.equal(m.resolveFullTime({...full,fullTime:false},[]).note,'相談あり');
+ assert.equal(drag.dragShift(full,15,'end').note,'相談あり');
+});

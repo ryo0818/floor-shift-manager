@@ -2456,3 +2456,5 @@ textarea:focus-visible {
 
 .inline-shift .full-time-choice { flex-direction:row; align-items:center; gap:8px; font-size:14px; }
 .inline-shift .full-time-choice input { width:18px; height:18px; padding:0; }
+
+.full-time-badge { font-weight:700; }
