@@ -76,6 +76,14 @@ def resolve_full_time(row, floors):
         if floor is None:
             raise RuleError("選択できないフロアです。")
         row.update(start=floor.get("workStart", "09:00"), end=floor.get("workEnd", "17:00"))
+    if not row.get("fullTime") and "[フルタイム]" not in row.get("note", "").split("\n"):
+        return row
+    lines = [line for line in row.get("note", "").split("\n") if line != "[フルタイム]"]
+    if row.get("fullTime"):
+        lines.append("[フルタイム]")
+    row["note"] = "\n".join(lines).strip("\n")
+    if len(row["note"]) > 500:
+        raise RuleError("フルタイムの表示を含めてメモは500文字以内で入力してください。")
     return row
 
 

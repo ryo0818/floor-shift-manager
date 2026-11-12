@@ -112,12 +112,23 @@ export const times = Array.from(
   (_, i) =>
     `${String(Math.floor(i / 4)).padStart(2, "0")}:${["00", "15", "30", "45"][i % 4]}`,
 );
-export const startTimes = times.filter(t => t >= "10:00");
+export const startTimes = times.filter(t => t >= "10:00" && t <= "23:30");
+export const defaultShiftTimes = { start: "18:00", end: "18:15" };
+export function timeSelection(start: string) {
+  const index = times.indexOf(start);
+  return { start, end: index >= 0 ? times[index + 1] ?? "" : "" };
+}
+export function fullTimeNote(note: string, fullTime: boolean) {
+  if (!fullTime && !note.split("\n").includes("[フルタイム]")) return note;
+  const lines = note.split("\n").filter(line => line !== "[フルタイム]");
+  if (fullTime) lines.push("[フルタイム]");
+  return lines.join("\n").replace(/^\n+|\n+$/g, "");
+}
 export function floorHours(floor?: Floor) {
   return { start: floor?.workStart ?? "09:00", end: floor?.workEnd ?? "17:00" };
 }
 export function resolveFullTime<T extends Row>(row: T, floors: Floor[]): T {
-  return row.fullTime ? { ...row, ...floorHours(floors.find(f => f.id === row.floorId)) } : row;
+  return { ...row, ...(row.fullTime ? floorHours(floors.find(f => f.id === row.floorId)) : {}), note: fullTimeNote(row.note, !!row.fullTime) };
 }
 export function overlaps(a: Row, b: Row) {
   return (

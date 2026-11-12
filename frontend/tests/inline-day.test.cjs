@@ -46,3 +46,16 @@ test('フルタイムでは開始・終了を無効化し、過去日のロッ�
  assert.match(html,/<select[^>]*希望1 終了[^>]*disabled=""/);
  assert.match(render({rows:[row],past:true}),/<fieldset[^>]*disabled=""/);
 });
+test('未操作の日は18:00〜18:15を表示し、休み希望のまま明示入力可能',()=>{
+ const html=render({});
+ assert.match(html,/<option value="18:00" selected="">/);
+ assert.match(html,/<option value="18:15" selected="">/);
+ assert.match(html,/未入力：休み希望/);assert.match(html,/この時間で希望を入力/);
+});
+const {DragBar}=load('src/components/drag-bar.tsx');
+test('ガントバーにホバー不要のフルタイム表示を含める',()=>{
+ const props={shift:{id:'x',date:base.date,start:'09:00',end:'17:00',floorId:'f1',employeeId:'e1',status:'pending',note:'',fullTime:true},index:0,from:0,span:1440,busy:false,name:'従業員',onDetail(){},onMove(){}};
+ const html=renderToStaticMarkup(React.createElement(DragBar,props));
+ assert.match(html,/<strong class="full-time-badge">フルタイム/);
+ assert.match(html,/aria-label="従業員 フルタイム/);
+});

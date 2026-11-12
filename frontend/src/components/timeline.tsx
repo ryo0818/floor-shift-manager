@@ -221,7 +221,8 @@ export function Timeline({
           <span className={`status ${active.status}`}>
             {statusNames[active.status]}
           </span>
-          <p>{active.note || "メモなし"}</p>
+          {active.fullTime && <p className="full-time-badge">フルタイム</p>}
+          <p style={{whiteSpace:"pre-wrap"}}>{active.note || "メモなし"}</p>
           <div className="timeline-actions">
             {active.status === "pending" ? (
               <>

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type Row, type Floor, type Period } from "../domain/model";
+import { defaultShiftTimes, timeSelection, startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type Row, type Floor, type Period } from "../domain/model";
 export function InlineDay({ date, rows, floors, period, disabled, past = false, onChange, onRemove }: {
   date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; past?: boolean;
   onChange: (r: Row) => void; onRemove: (r: Row) => void;
 }) {
   const [emptyId] = useState(()=>`day-${date}`);
-  const placeholder: Row = {id:emptyId, date, start:"", end:"", floorId:floors.length===1 ? floors[0].id : "", note:""};
+  const placeholder: Row = {id:emptyId, date, ...defaultShiftTimes, floorId:floors.length===1 ? floors[0].id : "", note:""};
   const displayed = rows.length ? rows : past ? [] : [placeholder];
   const locked = disabled || past;
   return <article className="day-card">
@@ -24,11 +24,11 @@ export function InlineDay({ date, rows, floors, period, disabled, past = false, 
           {row.floorId && !floors.some(f=>f.id===row.floorId) && <option value={row.floorId}>割り当て外（要変更）</option>}
           {floors.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
         </select></label>
-        <label className="full-time-choice"><input type="checkbox" checked={!!row.fullTime} onChange={e=>change({fullTime:e.target.checked, ...(!e.target.checked && row.start < "10:00" ? {start:"10:00"} : {})})}/>フルタイム</label>
+        <label className="full-time-choice"><input type="checkbox" checked={!!row.fullTime} onChange={e=>change({fullTime:e.target.checked, ...(!e.target.checked ? defaultShiftTimes : {})})}/>フルタイム</label>
         {row.fullTime && <small>フロア設定の時間：{row.start}〜{row.end}</small>}
         <div className="inline-times">
-          <label>開始<select aria-label={`${shortDate(date)} 希望${index+1} 開始`} value={row.start} disabled={!!row.fullTime} onChange={e=>change({start:e.target.value})}>
-            <option value="">未入力</option>{row.start && row.start < "10:00" && <option value={row.start} disabled>{row.start}（保存済み）</option>}{startTimes.map(t=><option key={t} value={t}>{t}</option>)}
+          <label>開始<select aria-label={`${shortDate(date)} 希望${index+1} 開始`} value={row.start} disabled={!!row.fullTime} onChange={e=>change(timeSelection(e.target.value))}>
+            <option value="">未入力</option>{row.start && !startTimes.includes(row.start) && <option value={row.start} disabled>{row.start}（保存済み）</option>}{startTimes.map(t=><option key={t} value={t}>{t}</option>)}
           </select></label>
           <span aria-hidden="true">〜</span>
           <label>終了<select aria-label={`${shortDate(date)} 希望${index+1} 終了`} value={row.end} disabled={!!row.fullTime} onChange={e=>change({end:e.target.value})}>
@@ -39,6 +39,7 @@ export function InlineDay({ date, rows, floors, period, disabled, past = false, 
         {error && <p className="form-error" role="status">{error}</p>}
         {overlap && <p className="form-error" role="status">同じ日の希望時間が重複しています。保存・提出時に確認してください。</p>}
       </fieldset>
+        {!real && <button type="button" disabled={locked || !row.floorId} className="text-btn" onClick={()=>change({})}>この時間で希望を入力</button>}
         {real && <button type="button" disabled={locked} className="text-btn" onClick={()=>onRemove(row)}><Trash2 size={16}/>この行を削除</button>}
       </div>;
     })}

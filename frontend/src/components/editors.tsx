@@ -8,6 +8,8 @@ import {
   conflicts,
   times,
   startTimes,
+  defaultShiftTimes,
+  timeSelection,
   floorHours,
   resolveFullTime,
   today,
@@ -118,7 +120,7 @@ export function ShiftEditor({
             <small>割り当てフロアが1つのため変更できません。</small>
           )}
         </label>
-        <CheckBox checked={!!r.fullTime} label="フルタイム" onChange={() => change({fullTime: !r.fullTime, ...(r.fullTime && r.start < "10:00" ? {start:"10:00"} : {})})}/>
+        <CheckBox checked={!!r.fullTime} label="フルタイム" onChange={() => change({fullTime: !r.fullTime, ...(r.fullTime ? defaultShiftTimes : {})})}/>
         {r.fullTime && <small>フロア設定の時間：{r.start}〜{r.end}</small>}
         <div className="form-grid">
           <label>
@@ -126,9 +128,9 @@ export function ShiftEditor({
             <Picker
               label="開始時刻"
               value={r.start}
-              onChange={(v) => change({ start: v })}
+              onChange={(v) => change(timeSelection(v))}
               disabled={!!r.fullTime}
-              items={[...(r.start < "10:00" ? [r.start] : []), ...startTimes].map((t) => ({ id: t, name: t, disabled: t < "10:00" }))}
+              items={[...(!startTimes.includes(r.start) ? [r.start] : []), ...startTimes].map((t) => ({ id: t, name: t, disabled: !startTimes.includes(t) }))}
             />
           </label>
           <label>
