@@ -10,6 +10,7 @@ import {
   type Shift,
   type Status,
 } from "../domain/model";
+import { RequestChangeView } from "./request-change";
 import { DragBar } from "./drag-bar";
 import { Modal } from "./controls";
 
@@ -224,6 +225,7 @@ export function Timeline({
             {statusNames[active.status]}
           </span>
           {active.fullTime && <p className="full-time-badge">フルタイム</p>}
+          {active.requestChange && <RequestChangeView change={active.requestChange} floors={data.floors}/>}
           <p style={{whiteSpace:"pre-wrap"}}>{active.note || "メモなし"}</p>
           <div className="timeline-actions">
             {active.status === "pending" ? (

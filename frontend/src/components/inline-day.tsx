@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { defaultShiftTimes, timeSelection, startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
-export function InlineDay({ date, rows, floors, period, disabled, employmentType = "partTime", past = false, onChange, onRemove }: {
+export function InlineDay({ date, rows, floors, period, disabled, employmentType = "partTime", past = false, onChange, onRemove, onRest }: {
   date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; employmentType?: EmploymentType; past?: boolean;
-  onChange: (r: Row) => void; onRemove: (r: Row) => void;
+  onChange: (r: Row) => void; onRemove: (r: Row) => void; onRest: () => void;
 }) {
   const [emptyId] = useState(()=>`day-${date}`);
   const placeholder: Row = {id:emptyId, date, ...defaultShiftTimes, floorId:floors.length===1 ? floors[0].id : "", note:""};
-  const displayed = rows.length ? rows : past ? [] : [placeholder];
+  const displayed = rows;
   const locked = disabled || past;
   return <article className="day-card">
-    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>{dayName(date)}</span></h2><span role="status" className={`day-plan ${rows.length ? "work" : "rest"}`}><small>希望：</small>{rows.length ? "勤務予定" : "休み予定"}</span></div>
+    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>{dayName(date)}</span></h2><span role="status" className={`day-plan ${rows.length ? "work" : "rest"}`}>{rows.length ? "勤務希望" : "休み希望"}</span></div>
+    {!past && <div className="day-choice" role="group" aria-label={`${shortDate(date)}の希望`}>
+      <button type="button" className="btn secondary" aria-pressed={!!rows.length} disabled={locked || !floors.length} onClick={()=>{if(!rows.length)onChange(placeholder);}}>勤務希望</button>
+      <button type="button" className="btn secondary" aria-pressed={!rows.length} disabled={locked} onClick={()=>{if(rows.length)onRest();}}>休み希望</button>
+    </div>}
     {displayed.map((row, index)=>{
       const real = rows.some(r=>r.id===row.id);
       let error="";
@@ -39,7 +43,6 @@ export function InlineDay({ date, rows, floors, period, disabled, employmentType
         {error && <p className="form-error" role="status">{error}</p>}
         {overlap && <p className="form-error" role="status">同じ日の希望時間が重複しています。保存・提出時に確認してください。</p>}
       </fieldset>
-        {!real && <button type="button" disabled={locked || !row.floorId} className="text-btn" onClick={()=>change({})}>この時間で希望を入力</button>}
         {real && <button type="button" disabled={locked} className="text-btn" onClick={()=>onRemove(row)}><Trash2 size={16}/>この行を削除</button>}
       </div>;
     })}

@@ -95,3 +95,19 @@ test('確定後の再提出は変更した希望だけ未確定に戻す',()=>{
  d.demoEmployee('e1');d.commandDemo(id,{type:'saveDraft',rows:[{...a,end:'20:00'},b],note:''});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});
  d.demoLogin('admin','demo1234');const after=d.readDemo(id).shifts;assert.equal(after.find(s=>s.original.id==='a').status,'pending');assert.equal(after.find(s=>s.original.id==='b').status,'confirmed');assert.deepEqual(after.map(s=>s.id),before.map(s=>s.id));
 });
+test('一括入力は選択日だけを置換し、元のID・過去日・未選択日は保持する',()=>{
+ const {m}=setup();const p=m.makePeriod('2030-04-01');const a={id:'keep',date:'2030-04-02',start:'18:00',end:'19:00',floorId:'f1',note:''};const b={...a,id:'other',date:'2030-04-03'};
+ const floors=[{id:'f1',workStart:'18:00',workEnd:'22:00',staffWorkStart:'09:00',staffWorkEnd:'17:00'}];
+ const next=m.applyBatchRows([a,b],['2030-04-02','2030-04-04'],{...a,fullTime:true},p,floors,'staff','2030-04-02');
+ assert.equal(next.find(r=>r.date===a.date).id,'keep');assert.equal(next.find(r=>r.date===a.date).start,'09:00');assert.deepEqual(next.find(r=>r.id==='other'),b);assert.equal(next.length,3);
+ assert.deepEqual(m.applyBatchRows([a,b],[a.date],null,p,floors,'staff','2030-04-02'),[b]);
+ assert.throws(()=>m.applyBatchRows([a,b],['2030-04-01'],a,p,floors,'staff','2030-04-02'),/今日以降/);
+ assert.throws(()=>m.applyBatchRows([a],[],a,p,floors),/日付を選んで/);
+ assert.throws(()=>m.applyBatchRows([a],['2030-04-02'],{...a,floorId:'other'},p,floors),/フロア/);
+});
+test('変更前後は再提出で記録され、同じ内容の再提出で消えず確定でマークが消える',()=>{
+ const {m,d}=setup(),id=m.movePeriod(m.periodOf(m.today()),3);const row={id:'a',date:id,start:'18:00',end:'19:00',floorId:'f1',note:''};
+ d.demoEmployee('e1');d.commandDemo(id,{type:'saveDraft',rows:[row],note:''});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});d.commandDemo(id,{type:'saveDraft',rows:[{...row,end:'20:00'}],note:''});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});
+ d.demoLogin('admin','demo1234');const w=d.readDemo(id),shift=w.shifts[0];assert.equal(shift.requestChange.before.end,'19:00');assert.equal(shift.requestChange.after.end,'20:00');assert.equal(w.submissions[0].latestChanges.length,1);
+ d.commandDemo(id,{type:'setStatus',ids:[shift.id],status:'confirmed'});assert.equal(d.readDemo(id).shifts[0].requestChange,undefined);
+});

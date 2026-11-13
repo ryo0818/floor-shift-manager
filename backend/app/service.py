@@ -70,6 +70,10 @@ def validate_row(row, period, allowed):
         raise RuleError("選択できないフロアです。割り当てを確認してください。")
 
 
+def request_snapshot(row):
+    return {key: deepcopy(row[key]) for key in ("id", "date", "start", "end", "floorId", "note", "fullTime") if key in row}
+
+
 def normalized_request(row):
     return {**row, "fullTime": row.get("fullTime", False)}
 
@@ -103,6 +107,8 @@ def project(state, user, revision):
             s.update(draftRows=[], draftNote="", dirty=False)
     else:
         submissions = [s for s in submissions if s["employeeId"] == user["employeeId"]]
+        for submission in submissions:
+            submission.pop("latestChanges", None)
     return {
         "floors": deepcopy(
             state["floors"]
@@ -182,6 +188,13 @@ def apply(state, user, c, now=None):
         keep = [s for s in shifts if s["employeeId"] != employee["id"] or s["date"] < today
                 or s.get("original", {}).get("id") not in previous_ids]
         updated = []
+        changes = []
+        prior_rows = {r["id"]: r for r in submission["submittedRows"] if r["date"] >= today}
+        incoming_ids = {r["id"] for r in editable_drafts}
+        for id_, prior in prior_rows.items():
+            old = previous.get(id_)
+            if id_ not in incoming_ids and not (old and old["date"] < today):
+                changes.append({"before": request_snapshot(old or prior), "after": None, "at": now.isoformat()})
         for row in editable_drafts:
             old = previous.get(row["id"])
             if old and old["date"] < today:
@@ -192,8 +205,16 @@ def apply(state, user, c, now=None):
             if old and normalized_request(row) == normalized_request(old["original"]):
                 updated.append(old)
             else:
-                updated.append({**deepcopy(row), "id": old["id"] if old else str(uuid.uuid4()),
-                                "employeeId": employee["id"], "status": "pending", "original": deepcopy(row)})
+                new = {**deepcopy(row), "id": old["id"] if old else str(uuid.uuid4()),
+                       "employeeId": employee["id"], "status": "pending", "original": deepcopy(row)}
+                if submission["submittedAt"]:
+                    change = {"before": request_snapshot(old or prior_rows[row["id"]]) if old or row["id"] in prior_rows else None,
+                              "after": deepcopy(row), "at": now.isoformat()}
+                    changes.append(change)
+                    new["requestChange"] = {**change, "before": deepcopy(old["requestChange"]["before"]) if old and old.get("requestChange") else change["before"]}
+                updated.append(new)
+        if changes:
+            submission["latestChanges"] = changes
         submission.update(
             submittedRows=deepcopy([*(r for r in submission["submittedRows"] if r["date"] < today), *editable_drafts]),
             submittedNote=submission["draftNote"],
@@ -259,6 +280,8 @@ def apply(state, user, c, now=None):
             else {k: v for k, v in row.items() if k != "employeeId"}
         )
         new = {**row, "status": "pending", "original": deepcopy(original)}
+        if old and old.get("requestChange"):
+            new["requestChange"] = deepcopy(old["requestChange"])
         state["shifts"] = (
             [new if s["id"] == row["id"] else s for s in shifts]
             if old
@@ -306,6 +329,8 @@ def apply(state, user, c, now=None):
                 )
         for s in target:
             s["status"] = status
+            if status != "pending":
+                s.pop("requestChange", None)
     else:
         raise RuleError("未対応の操作です。")
 

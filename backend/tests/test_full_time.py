@@ -90,3 +90,25 @@ def test_resubmission_preserves_manual_adjustments_and_removes_withdrawn_request
     assert {r["id"] for r in s["shifts"]} == {first["id"],"manual"}
     preserved = next(r for r in s["shifts"] if r["id"]==first["id"])
     assert preserved["start"] == "11:00" and preserved["status"] == "confirmed"
+
+
+def test_change_history_survives_repeat_submission_and_records_withdrawal():
+    s = state()
+    a = row()
+    apply(s, EMPLOYEE, dict(type="saveDraft", rows=[a], note=""), NOW)
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    apply(s, ADMIN, dict(type="setStatus", ids=[s["shifts"][0]["id"]], status="confirmed"), NOW)
+    changed = {**a, "start":"11:00"}
+    apply(s, EMPLOYEE, dict(type="saveDraft", rows=[changed], note=""), NOW)
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    marker = deepcopy(s["shifts"][0]["requestChange"])
+    assert marker["before"]["start"] == "10:00" and marker["after"]["start"] == "11:00"
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    assert s["shifts"][0]["requestChange"] == marker
+    apply(s, ADMIN, dict(type="setStatus", ids=[s["shifts"][0]["id"]], status="confirmed"), NOW)
+    assert "requestChange" not in s["shifts"][0]
+    apply(s, EMPLOYEE, dict(type="saveDraft", rows=[], note=""), NOW)
+    apply(s, EMPLOYEE, dict(type="submit", acknowledgeOverlap=False), NOW)
+    assert s["shifts"] == []
+    assert s["submissions"][0]["latestChanges"][0]["after"] is None
+    assert s["submissions"][0]["latestChanges"][0]["before"]["start"] == "11:00"
