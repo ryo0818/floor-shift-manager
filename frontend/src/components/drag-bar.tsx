@@ -51,7 +51,7 @@ export function DragBar({shift, index, from, span, busy, name, onDetail, onMove}
       aria-label={`${name} ${shown.fullTime ? "フルタイム " : ""}${shown.start}〜${shown.end} ${statusNames[shift.status]} 詳細と操作`}
       title={`${shown.start}〜${shown.end} ${shift.status==="pending" ? "ドラッグで移動、両端で時間調整。クリックで詳細" : "調整するには未確定に戻してください"}`}>
       {shift.status==="pending" && <span className="drag-handle start" data-handle="start" aria-hidden="true">⋮</span>}
-      <span>{shown.fullTime && <strong className="full-time-badge">フルタイム · </strong>}{shown.start}–{shown.end} · {saving ? "保存中…" : statusNames[shift.status]}</span>
+      <span>{shown.requestChange && <strong className="change-badge">変更あり · </strong>}{shown.fullTime && <strong className="full-time-badge">フルタイム · </strong>}{shown.start}–{shown.end} · {saving ? "保存中…" : statusNames[shift.status]}</span>
       {shift.status==="pending" && <span className="drag-handle end" data-handle="end" aria-hidden="true">⋮</span>}
     </button>
     {error && <span role="alert" className="drag-error">{error}</span>}

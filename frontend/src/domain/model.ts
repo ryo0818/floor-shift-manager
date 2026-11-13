@@ -20,7 +20,8 @@ export type Row = {
   note: string;
   fullTime?: boolean;
 };
-export type Shift = Row & { employeeId: string; status: Status; original: Row };
+export type RequestChange = { before: Row | null; after: Row | null; at: string };
+export type Shift = Row & { employeeId: string; status: Status; original: Row; requestChange?: RequestChange };
 export type Submission = {
   employeeId: string;
   draftRows: Row[];
@@ -28,6 +29,7 @@ export type Submission = {
   submittedRows: Row[];
   submittedNote: string;
   submittedAt: string | null;
+  latestChanges?: RequestChange[];
   dirty: boolean;
 };
 export type Period = {
@@ -181,4 +183,18 @@ export function adminListShifts(shifts: Shift[], period: Period, fromToday: bool
 export function orderedEmployees(employees: Employee[], floor?: Floor): Employee[] {
   const order = new Map((floor?.employeeOrder ?? []).map((id, index) => [id, index]));
   return [...employees].sort((a,b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+}
+
+export function applyBatchRows(rows: Row[], dates: string[], template: Row | null, period: Period, floors: Floor[], employmentType: EmploymentType = "partTime", currentDate = today()): Row[] {
+  const selected = new Set(dates);
+  if (!selected.size) throw new Error("日付を選んでください。");
+  if (expired(period) || [...selected].some(d => d < currentDate || !daysOf(period).includes(d))) throw new Error("今日以降の受付中の日付を選び直してください。");
+  const next = rows.filter(row => !selected.has(row.date));
+  if (template) for (const date of selected) {
+    const row = resolveFullTime({...template, date, id: rows.find(r=>r.date===date)?.id ?? crypto.randomUUID()}, floors, employmentType);
+    validateRow(row, period, floors.map(f=>f.id));
+    next.push(row);
+  }
+  if (next.length > 500) throw new Error("希望は500件以内にしてください。");
+  return next;
 }

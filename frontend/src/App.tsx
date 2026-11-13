@@ -39,6 +39,8 @@ import {
 } from "./components/ui/alert-dialog";
 import { Picker, EmptyState, CheckBox } from "./components/controls";
 import { Accounts, PasswordChange } from "./components/accounts";
+import { BatchDays } from "./components/batch-days";
+import { RequestChangeView } from "./components/request-change";
 import { InlineDay } from "./components/inline-day";
 import { printPeriod } from "./domain/period-print";
 import { FloorOrder } from "./components/floor-order";
@@ -684,6 +686,7 @@ export default function App() {
                             </div>
                           </div>
                         </div>
+                        {data.submissions.some(s=>s.latestChanges?.length) && <details className="submission-changes"><summary>希望の変更履歴（各従業員の直近の変更提出）</summary>{data.submissions.filter(s=>s.latestChanges?.length).map(s=><section key={s.employeeId}><h3>{name(s.employeeId)}</h3>{s.latestChanges?.map((change,i)=><RequestChangeView key={i} change={change} floors={data.floors}/>)}</section>)}</details>}
                         <section className="board">
                           <div className="board-top">
                             <div>
@@ -939,6 +942,7 @@ export default function App() {
                                                 </span>
                                               </TableCell>
                                               <TableCell className="note-cell">
+                                                {s.requestChange && <RequestChangeView change={s.requestChange} floors={data.floors}/>}
                                                 {s.note || "—"}
                                                 {(s.original.date !== s.date ||
                                                   s.original.start !==
@@ -1369,6 +1373,8 @@ export default function App() {
                           勤務可能フロアが未設定です。管理者に割り当てを依頼してください。
                         </div>
                       )}
+                      <p className="input-guide">① 日付ごとに勤務希望・休み希望を選択 → ② 時間を調整 → ③ 提出。未入力の日は休み希望です。</p>
+                      <BatchDays key={data.period.id} rows={rows} floors={data.floors} period={data.period} employmentType={data.employees.find(e=>e.id===session.employeeId)?.employmentType} disabled={locked || busy} onApply={next=>{if(expired(data.period)||busy)return;setRows(next);setDirty(true);}}/>
                       <section className="employee-days">
                         {daysOf(data.period).map((d) => (
                           <InlineDay key={d} date={d} employmentType={data.employees.find(e=>e.id===session.employeeId)?.employmentType} rows={rows.filter(r=>r.date===d)}
@@ -1378,6 +1384,7 @@ export default function App() {
                               setRows(current=>current.some(r=>r.id===row.id) ? current.map(r=>r.id===row.id ? row : r) : [...current,row]);
                               setDirty(true);
                             }}
+                            onRest={()=>setConfirm({title:"この日を休み希望にしますか？",text:`${shortDate(d)}の入力済みの時間・メモを削除します。変更を反映するには提出してください。`,action:async()=>{if(d<today()||expired(data.period))throw new Error("受付中の日付を選んでください。");setRows(current=>current.filter(r=>r.date!==d));setDirty(true);}})}
                             onRemove={row=>setConfirm({
                               title:"希望の入力行を削除しますか？",
                               text:`${shortDate(d)} ${row.start || "未入力"}〜${row.end || "未入力"}。削除後は下書き保存・再提出してください。`,

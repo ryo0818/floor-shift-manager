@@ -7,7 +7,7 @@ export function PeriodGrid({data, visible, onSelect}: {data:Workspace;visible:Sh
       <TableHeader><TableRow><TableHead>従業員</TableHead>{daysOf(data.period).map(d=><TableHead key={d}>{shortDate(d)}<small>{dayName(d)}</small></TableHead>)}</TableRow></TableHeader>
       <TableBody>{orderedEmployees(data.employees,f).filter(e=>rows.some(s=>s.employeeId===e.id)).map(e=><TableRow key={e.id}>
         <TableCell>{e.name}<small className="employee-kind">{employmentNames[e.employmentType ?? "partTime"]}</small></TableCell>
-        {daysOf(data.period).map(d=><TableCell key={d}>{rows.filter(s=>s.employeeId===e.id && s.date===d).map(s=><button key={s.id} className={`grid-shift ${s.status}`} onClick={()=>onSelect(e.id,f.id)}><div className="row-time">{s.start}–{s.end}</div><span className={`status ${s.status}`}>{statusNames[s.status]}</span>{s.fullTime && <small>フルタイム</small>}</button>)}</TableCell>)}
+        {daysOf(data.period).map(d=><TableCell key={d}>{rows.filter(s=>s.employeeId===e.id && s.date===d).map(s=><button key={s.id} className={`grid-shift ${s.status}`} onClick={()=>onSelect(e.id,f.id)}><div className="row-time">{s.start}–{s.end}</div><span className={`status ${s.status}`}>{statusNames[s.status]}</span>{s.requestChange && <strong className="change-badge">変更あり</strong>}{s.fullTime && <small>フルタイム</small>}</button>)}</TableCell>)}
       </TableRow>)}</TableBody>
     </Table></div></section>;
   })}</>;

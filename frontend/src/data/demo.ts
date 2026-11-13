@@ -1,5 +1,6 @@
 import {
   Command,
+  RequestChange,
   Employee,
   Floor,
   Period,
@@ -148,7 +149,7 @@ export function readDemo(id: string): Workspace {
           draftNote: "",
           dirty: false,
         }))
-      : b.submissions.filter((s) => s.employeeId === session!.employeeId),
+      : b.submissions.filter((s) => s.employeeId === session!.employeeId).map(({latestChanges:_changes,...s})=>s),
     shifts: admin ? b.shifts : [],
     policy: { allowEarlyConfirm: false },
   });
@@ -212,14 +213,30 @@ export function commandDemo(id: string, c: Command) {
     const keep = b.shifts.filter(r=>r.employeeId!==e.id || r.date<currentDate || !previousIds.has(r.original.id));
     const same = (a:Row,b:Row) => a.id===b.id && a.date===b.date && a.floorId===b.floorId && a.start===b.start && a.end===b.end && a.note===b.note && !!a.fullTime===!!b.fullTime;
     const updated: Shift[] = [];
+    const changes: RequestChange[] = [];
+    const priorRows = new Map(s.submittedRows.filter(r=>r.date>=currentDate).map(r=>[r.id,r]));
+    const snapshot = (r:Row):Row => ({id:r.id,date:r.date,start:r.start,end:r.end,floorId:r.floorId,note:r.note,fullTime:!!r.fullTime});
+    for (const [id,prior] of priorRows) {
+      const old=previous.get(id);
+      if(!editable.some(r=>r.id===id) && !(old && old.date<currentDate))changes.push({before:snapshot(old ?? prior),after:null,at:new Date().toISOString()});
+    }
     for (const row of editable) {
       const old = previous.get(row.id);
       if (old && old.date < currentDate) {
         if (!same(row,old.original)) throw new Error("過去日の勤務に対応する希望は変更できません。");
         continue;
       }
-      updated.push(old && same(row,old.original) ? old : {...copy(row),id:old?.id ?? crypto.randomUUID(),employeeId:e.id,status:"pending",original:copy(row)});
+      if(old && same(row,old.original)) {updated.push(old);continue;}
+      const next:Shift={...copy(row),id:old?.id ?? crypto.randomUUID(),employeeId:e.id,status:"pending",original:copy(row)};
+      if(s.submittedAt) {
+        const before=old ?? priorRows.get(row.id);
+        const change:RequestChange={before:before?snapshot(before):null,after:copy(row),at:new Date().toISOString()};
+        changes.push(change);
+        next.requestChange={...change,before:old?.requestChange?copy(old.requestChange.before):change.before};
+      }
+      updated.push(next);
     }
+    if(changes.length)s.latestChanges=changes;
     s.submittedRows = copy([...s.submittedRows.filter(r => r.date < currentDate), ...editable]);
     s.submittedNote = s.draftNote;
     s.submittedAt = new Date().toISOString();
@@ -315,6 +332,7 @@ export function commandDemo(id: string, c: Command) {
     const next = {
       ...copy(r),
       status: "pending" as const,
+      ...(old?.requestChange ? {requestChange:copy(old.requestChange)} : {}),
       original: old?.original || copy(r),
     };
     b.shifts = old
@@ -367,7 +385,7 @@ export function commandDemo(id: string, c: Command) {
       }
     }
     b.shifts = b.shifts.map((x) =>
-      ids.has(x.id) ? { ...x, status: c.status } : x,
+      ids.has(x.id) ? { ...x, status: c.status, ...(c.status!=="pending"?{requestChange:undefined}:{}) } : x,
     );
     return;
   }
