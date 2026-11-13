@@ -44,7 +44,7 @@ export function Timeline({
   const day = days.includes(date) ? date : initialDisplayDate(data.period);
   const active = data.shifts.find((s) => s.id === detail);
   const name = (id: string) =>
-    data.employees.find((e) => e.id === id)?.name || "未登録";
+    (() => { const e = data.employees.find(e=>e.id===id); return e ? `${e.name}${e.active===false ? "（退職）" : ""}` : "未登録"; })();
   const action = (ids: string[], status: Status) => {
     setDetail(null);
     onStatus(ids, status);

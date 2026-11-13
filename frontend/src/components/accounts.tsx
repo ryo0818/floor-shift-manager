@@ -83,7 +83,7 @@ export function Accounts({ employees, initialEmployeeId, close }: {
         setTarget(e.target.value); setInitialPassword(""); setMessage(""); setError("");
       }}>
         <option value="">選択してください</option>
-        {employees.map(e => <option key={e.id} value={e.id}>{e.name}（{accounts.some(a => a.employeeId === e.id) ? "発行済み" : "未発行"}）</option>)}
+        {employees.filter(e=>e.active!==false).map(e => <option key={e.id} value={e.id}>{e.name}（{accounts.some(a => a.employeeId === e.id) ? "発行済み" : "未発行"}）</option>)}
       </select></label>
       {target && loaded && <>
         {existing ? <>

@@ -111,3 +111,28 @@ test('変更前後は再提出で記録され、同じ内容の再提出で消�
  d.demoLogin('admin','demo1234');const w=d.readDemo(id),shift=w.shifts[0];assert.equal(shift.requestChange.before.end,'19:00');assert.equal(shift.requestChange.after.end,'20:00');assert.equal(w.submissions[0].latestChanges.length,1);
  d.commandDemo(id,{type:'setStatus',ids:[shift.id],status:'confirmed'});assert.equal(d.readDemo(id).shifts[0].requestChange,undefined);
 });
+
+test('退職は履歴を残してログイン・新規勤務・確定を停止し復帰できる',()=>{
+ const {m,d}=setup();const id=m.movePeriod(m.periodOf(m.today()),1);
+ d.demoLogin('admin','demo1234');d.commandDemo(id,{type:'setDeadline',deadline:null});
+ const before=d.readDemo(id);const pending=before.shifts.find(s=>s.employeeId==='e1'&&s.status==='pending');
+ d.commandDemo(id,{type:'setEmployeeActive',id:'e1',active:false});
+ assert.deepEqual(d.readDemo(id).shifts,before.shifts);
+ assert.throws(()=>d.demoEmployee('e1'));
+ assert.throws(()=>d.commandDemo(id,{type:'setStatus',ids:[pending.id],status:'confirmed'}),/退職者/);
+ assert.throws(()=>d.commandDemo(id,{type:'saveShift',shift:{...pending,id:'new'},acknowledgeOverlap:true}),/退職者/);
+ const employee=d.readDemo(id).employees.find(e=>e.id==='e1');
+ d.commandDemo(id,{type:'saveEmployee',employee:{...employee,active:true}});
+ assert.equal(d.readDemo(id).employees.find(e=>e.id==='e1').active,false);
+ d.commandDemo(id,{type:'setEmployeeActive',id:'e1',active:true});
+ d.demoEmployee('e1');assert.equal(d.readDemo(id).employees[0].active,true);
+});
+test('従業員への確定予定は本人の確定分だけでメモや他人の情報を含まない',()=>{
+ const {m,d}=setup();const id=m.movePeriod(m.periodOf(m.today()),1);
+ d.demoLogin('admin','demo1234');d.commandDemo(id,{type:'setDeadline',deadline:null});
+ const pending=d.readDemo(id).shifts.find(s=>s.employeeId==='e1'&&s.status==='pending');
+ d.commandDemo(id,{type:'setStatus',ids:[pending.id],status:'confirmed'});
+ d.demoEmployee('e1');const result=d.readDemo(id);
+ assert.ok(result.confirmedSchedule.some(s=>s.id===pending.id));assert.equal(result.shifts.length,0);
+ for(const row of result.confirmedSchedule){assert.equal('note' in row,false);assert.equal('original' in row,false);assert.equal('employeeId' in row,false);}
+});

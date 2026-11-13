@@ -41,6 +41,7 @@ import { Picker, EmptyState, CheckBox } from "./components/controls";
 import { Accounts, PasswordChange } from "./components/accounts";
 import { BatchDays } from "./components/batch-days";
 import { RequestChangeView } from "./components/request-change";
+import { OwnSchedule } from "./components/own-schedule";
 import { InlineDay } from "./components/inline-day";
 import { printPeriod } from "./domain/period-print";
 import { FloorOrder } from "./components/floor-order";
@@ -279,6 +280,9 @@ export default function App() {
     [fromToday, setFromToday] = useState(true),
     [boardMode, setBoardMode] = useState("list"),
     [clock, setClock] = useState(Date.now());
+  const [changesOnly, setChangesOnly] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [memberStatus, setMemberStatus] = useState("active");
   const [orderFloor, setOrderFloor] = useState<Floor | null>(null);
   const [accountsTarget, setAccountsTarget] = useState<string | null>(null);
   const [passwordOpen, setPasswordOpen] = useState(false);
@@ -497,12 +501,12 @@ export default function App() {
                 <button
                   className="btn primary"
                   disabled={
-                    busy || !data?.employees.length || !data?.floors.length || data.period.end < today(clock)
+                    busy || !data?.employees.some(e=>e.active!==false) || !data?.floors.length || data.period.end < today(clock)
                   }
                   onClick={() =>
                     setEditor({
                       row: newRow(),
-                      employeeId: data!.employees[0].id,
+                      employeeId: data!.employees.find(e=>e.active!==false)!.id,
                       admin: true,
                     })
                   }
@@ -612,6 +616,7 @@ export default function App() {
                       .filter(
                         (s) =>
                           (floor === "all" || s.floorId === floor) &&
+                          (!changesOnly || !!s.requestChange) &&
                           (filter === "all" || s.status === filter) &&
                           (!search ||
                             data.employees
@@ -633,12 +638,19 @@ export default function App() {
                         (floor === "all" || s.floorId === floor),
                     );
                     const name = (id: string) =>
-                      data.employees.find((e) => e.id === id)?.name || "未登録";
+                      (() => { const e=data.employees.find(e=>e.id===id);return e ? `${e.name}${e.active===false ? "（退職）" : ""}` : "未登録"; })();
                     const canConfirm =
                       data.policy.allowEarlyConfirm ||
                       !data.period.deadline || clock >= Date.parse(data.period.deadline);
                     return (
                       <>
+                        <section className="change-attention" aria-label="希望変更の確認">
+                          <strong>この半月の変更あり：{data.shifts.filter(s=>s.requestChange).length}件</strong>
+                          <span>直近の変更提出に含まれる取り消し：{data.submissions.reduce((n,s)=>n+(s.latestChanges?.filter(c=>!c.after).length ?? 0),0)}件</span>
+                          <button className="btn secondary" onClick={()=>{setChangesOnly(true);setFloor("all");setFilter("all");setSearch("");setFromToday(false);setBoardMode("list");setSelected([]);}}>変更分を確認</button>
+                          <button className="btn secondary" onClick={()=>setHistoryOpen(true)}>取り消し履歴を開く</button>
+                          <p>変更前後は各シフトで確認できます。取り消しは下の「希望の変更履歴」を開いて確認してください。取り消し件数は未確認件数ではありません。</p>
+                        </section>
                         <div className="summary">
                           <div>
                             <span className="summary-icon">
@@ -686,7 +698,7 @@ export default function App() {
                             </div>
                           </div>
                         </div>
-                        {data.submissions.some(s=>s.latestChanges?.length) && <details className="submission-changes"><summary>希望の変更履歴（各従業員の直近の変更提出）</summary>{data.submissions.filter(s=>s.latestChanges?.length).map(s=><section key={s.employeeId}><h3>{name(s.employeeId)}</h3>{s.latestChanges?.map((change,i)=><RequestChangeView key={i} change={change} floors={data.floors}/>)}</section>)}</details>}
+                        {data.submissions.some(s=>s.latestChanges?.length) && <details className="submission-changes" open={historyOpen} onToggle={e=>setHistoryOpen(e.currentTarget.open)}><summary>希望の変更履歴（各従業員の直近の変更提出）</summary>{data.submissions.filter(s=>s.latestChanges?.length).map(s=><section key={s.employeeId}><h3>{name(s.employeeId)}</h3>{s.latestChanges?.map((change,i)=><RequestChangeView key={i} change={change} floors={data.floors}/>)}</section>)}</details>}
                         <section className="board">
                           <div className="board-top">
                             <div>
@@ -741,9 +753,10 @@ export default function App() {
                             </div>
                           </div>
                           <div className="filter-row">
+                            <label className="check-label"><input type="checkbox" checked={changesOnly} onChange={e=>{setChangesOnly(e.target.checked);setSelected([]);}}/>変更ありのみ</label>
                             {boardMode === "list" && <Picker label="表示日付" value={fromToday ? "today" : "all"} onChange={value => { setFromToday(value === "today"); setSelected([]); }} items={[{id:"today",name:"今日以降（過去の半月は全体）"},{id:"all",name:"半月全体"}]}/>}
                             {boardMode === "grid" && <button className="btn secondary" disabled={busy || !data.floors.length} onClick={() => {
-                              try { printPeriod(data, matching, floor, `${filter === "all" ? "すべての状態" : statusNames[filter as Status]}${search ? ` / 氏名検索：${search}` : ""}`); }
+                              try { printPeriod(data, matching, floor, `${changesOnly ? "変更ありのみ / " : ""}${filter === "all" ? "すべての状態" : statusNames[filter as Status]}${search ? ` / 氏名検索：${search}` : ""}`); }
                               catch(e) { setError((e as Error).message); }
                             }}>半月表をPDFに保存</button>}
 
@@ -1121,8 +1134,8 @@ export default function App() {
                       <div className="board-top">
                         <h2>提出状況</h2>
                         <span className="counter">
-                          {data.submissions.filter((s) => s.submittedAt).length}{" "}
-                          / {data.employees.length}人 提出済み
+                          {data.submissions.filter((s) => s.submittedAt && data.employees.some(e=>e.id===s.employeeId && e.active!==false)).length}{" "}
+                          / {data.employees.filter(e=>e.active!==false).length}人 提出済み（在籍者）
                         </span>
                       </div>
                       <Table className="submission-table">
@@ -1136,7 +1149,7 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {data.employees.map((e) => {
+                          {data.employees.filter(e=>e.active!==false).map((e) => {
                             const s = data.submissions.find(
                               (x) => x.employeeId === e.id,
                             );
@@ -1184,6 +1197,7 @@ export default function App() {
                 {tab === "members" && (
                   <div className="masters">
                     {!DEMO && <button className="btn primary" onClick={()=>setAccountsTarget("")}>ログインアカウント管理</button>}
+                    <Picker label="在籍状態" value={memberStatus} onChange={setMemberStatus} items={[{id:"active",name:"在籍者"},{id:"inactive",name:"退職者"},{id:"all",name:"すべて"}]}/>
                     <section className="board floor-master">
                       <div className="board-top">
                         <h2>
@@ -1253,9 +1267,9 @@ export default function App() {
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {data.employees.map((e) => (
+                          {data.employees.filter(e=>memberStatus==="all" || (memberStatus==="active" ? e.active!==false : e.active===false)).map((e) => (
                             <TableRow key={e.id}>
-                              <TableCell>{e.name}</TableCell>
+                              <TableCell>{e.name} {e.active===false && <span className="status declined">退職</span>}</TableCell>
                               <TableCell>{employmentNames[e.employmentType ?? "partTime"]}</TableCell>
                               <TableCell>
                                 <div className="assignment-chips">
@@ -1276,6 +1290,11 @@ export default function App() {
                               </TableCell>
                               <TableCell>
                                 <div className="employee-actions">
+                                <button className="text-btn" disabled={busy} onClick={()=>setConfirm({
+                                  title:e.active===false ? `${e.name}を在籍に戻しますか？` : `${e.name}を退職扱いにしますか？`,
+                                  text:e.active===false ? "元のアカウントでログインできるようになります。フロアの割り当ても確認してください。" : "ログインを停止し、ログイン中の端末を無効化します。履歴と既存シフトは全期間そのまま残ります。今後の勤務が残っていないか、各半月を確認し必要に応じて見送りにしてください。",
+                                  action:async()=>{await run({type:"setEmployeeActive",id:e.id,active:e.active===false},e.active===false ? "在籍に戻しました" : "退職扱いにしました");},
+                                })}>{e.active===false ? "在籍に戻す" : "退職にする"}</button>
                                 <button className="text-btn" disabled={busy}
                                   aria-label={`${e.name}を削除`}
                                   onClick={()=>setConfirm({
@@ -1328,6 +1347,7 @@ export default function App() {
                   };
                   return (
                     <>
+                      <OwnSchedule data={data}/>
                       <div
                         className={`employee-status ${locked ? "closed" : ""}`}
                       >
@@ -1495,7 +1515,7 @@ export default function App() {
           row={editor.row}
           period={data.period}
           floors={data.floors}
-          employees={data.employees}
+          employees={data.employees.filter(e=>e.active!==false || e.id===editor.employeeId)}
           employeeId={editor.employeeId}
           existing={
             editor.admin

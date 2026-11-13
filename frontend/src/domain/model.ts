@@ -9,7 +9,7 @@ export type Session = {
 export type EmploymentType = "partTime" | "staff";
 export const employmentNames: Record<EmploymentType, string> = {partTime:"アルバイト",staff:"社員"};
 export type Floor = { id: string; name: string; color: string; workStart?: string; workEnd?: string; staffWorkStart?: string | null; staffWorkEnd?: string | null; employeeOrder?: string[] };
-export type Employee = { id: string; name: string; floorIds: string[]; employmentType?: EmploymentType };
+export type Employee = { id: string; name: string; floorIds: string[]; employmentType?: EmploymentType; active?: boolean };
 export type Status = "pending" | "confirmed" | "declined";
 export type Row = {
   id: string;
@@ -38,7 +38,9 @@ export type Period = {
   end: string;
   deadline: string | null;
 };
+export type ConfirmedSchedule = Pick<Row, "id" | "date" | "start" | "end" | "floorId" | "fullTime"> & { floorName: string };
 export type Workspace = {
+  confirmedSchedule?: ConfirmedSchedule[];
   floors: Floor[];
   employees: Employee[];
   period: Period;
@@ -47,6 +49,7 @@ export type Workspace = {
   policy: { allowEarlyConfirm: boolean };
 };
 export type Command =
+  | { type: "setEmployeeActive"; id: string; active: boolean }
   | { type: "saveDraft"; rows: Row[]; note: string }
   | { type: "submit"; acknowledgeOverlap: boolean }
   | {

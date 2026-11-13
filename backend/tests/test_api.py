@@ -773,3 +773,19 @@ def test_floor_order_validation_and_assignment_cleanup(system):
     ok(admin, "saveEmployee", employee={**employee,"floorIds":["f2"]})
     assert next(f for f in workspace(admin)["floors"] if f["id"] == "f1")["employeeOrder"] == ["e2"]
     assert command(admin, "saveEmployee", employee={**employee,"employmentType":"unknown"}).status_code == 422
+
+
+def test_retirement_revokes_sessions_and_blocks_login_until_restored(system):
+    app, path, admin = system
+    login(admin)
+    with TestClient(app) as employee:
+        login(employee, "employee1")
+        ok(admin, "setEmployeeActive", id="e1", active=False)
+        assert employee.get("/api/workspace", params={"period": PERIOD}).status_code == 401
+        with db.transaction(path) as con:
+            assert con.execute("SELECT count(*) AS n FROM sessions WHERE login='employee1'").fetchone()["n"] == 0
+        token = employee.get("/api/session").json()["csrfToken"]
+        response = employee.post("/api/session/login", json={"id":"employee1","password":PASSWORD}, headers={"X-CSRF-TOKEN":token})
+        assert response.status_code == 401
+        ok(admin, "setEmployeeActive", id="e1", active=True)
+        assert login(employee, "employee1")["employeeId"] == "e1"
