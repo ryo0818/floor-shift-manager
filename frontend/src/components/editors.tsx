@@ -2,6 +2,8 @@ import { useState, type FormEvent } from "react";
 import { Clock3 } from "lucide-react";
 import {
   Employee,
+  EmploymentType,
+  employmentNames,
   Floor,
   Period,
   Row,
@@ -55,7 +57,7 @@ export function ShiftEditor({
     ),
   ]).filter((x) => x.a.id === r.id || x.b.id === r.id);
   const change = (v: Partial<Row>) => {
-    setR(resolveFullTime({ ...r, ...v }, floors));
+    setR(resolveFullTime({ ...r, ...v }, floors, employees.find(e => e.id === person)?.employmentType));
     setAck(false);
   };
   async function save(e: FormEvent) {
@@ -89,6 +91,7 @@ export function ShiftEditor({
               value={person}
               onChange={(v) => {
                 setPerson(v);
+                setR(resolveFullTime(r, floors, employees.find(e => e.id === v)?.employmentType));
                 setAck(false);
               }}
               items={employees}
@@ -214,6 +217,9 @@ export function MasterEditor({
     [color, setColor] = useState(floor?.color || "#236b59"),
     [workStart, setWorkStart] = useState(floorHours(floor).start),
     [workEnd, setWorkEnd] = useState(floorHours(floor).end),
+    [staffWorkStart, setStaffWorkStart] = useState(floorHours(floor, "staff").start),
+    [staffWorkEnd, setStaffWorkEnd] = useState(floorHours(floor, "staff").end),
+    [employmentType, setEmploymentType] = useState<EmploymentType>(person?.employmentType ?? "partTime"),
     [error, setError] = useState("");
   async function save(e: FormEvent) {
     e.preventDefault();
@@ -222,15 +228,16 @@ export function MasterEditor({
       return;
     }
     try {
-      if (kind === "floor" && workStart >= workEnd) throw new Error("フルタイムの終了は開始より後にしてください。");
+      if (kind === "floor" && (workStart >= workEnd || staffWorkStart >= staffWorkEnd)) throw new Error("フルタイムの終了は開始より後にしてください。");
       await onSave(
         kind === "employee"
           ? {
               id: person?.id || crypto.randomUUID(),
               name: name.trim(),
               floorIds: ids,
+              employmentType,
             }
-          : { id: floor?.id || crypto.randomUUID(), name: name.trim(), color, workStart, workEnd },
+          : { ...floor, id: floor?.id || crypto.randomUUID(), name: name.trim(), color, workStart, workEnd, staffWorkStart, staffWorkEnd },
       );
     } catch (e) {
       setError((e as Error).message);
@@ -266,10 +273,12 @@ export function MasterEditor({
               onChange={(e) => setColor(e.target.value)}
             />
           </label>
-          <label>フルタイム開始<Picker label="フルタイム開始" value={workStart} onChange={setWorkStart} items={times.map(t=>({id:t,name:t}))}/></label>
-          <label>フルタイム終了<Picker label="フルタイム終了" value={workEnd} onChange={setWorkEnd} items={times.map(t=>({id:t,name:t}))}/></label></>
+          <label>アルバイト：フルタイム開始<Picker label="アルバイトのフルタイム開始" value={workStart} onChange={setWorkStart} items={times.map(t=>({id:t,name:t}))}/></label>
+          <label>アルバイト：フルタイム終了<Picker label="アルバイトのフルタイム終了" value={workEnd} onChange={setWorkEnd} items={times.map(t=>({id:t,name:t}))}/></label>
+          <label>社員：フルタイム開始<Picker label="社員のフルタイム開始" value={staffWorkStart} onChange={setStaffWorkStart} items={times.map(t=>({id:t,name:t}))}/></label>
+          <label>社員：フルタイム終了<Picker label="社員のフルタイム終了" value={staffWorkEnd} onChange={setStaffWorkEnd} items={times.map(t=>({id:t,name:t}))}/></label></>
         ) : (
-          <fieldset>
+          <><label>区分<Picker label="従業員区分" value={employmentType} onChange={value=>setEmploymentType(value as EmploymentType)} items={Object.entries(employmentNames).map(([id,name])=>({id,name}))}/></label><fieldset>
             <legend>勤務可能フロア</legend>
             <div className="floor-checks">
               {floors.map((f) => (
@@ -292,7 +301,7 @@ export function MasterEditor({
                 未割り当ての従業員は、希望を追加できません（仮仕様）。
               </p>
             )}
-          </fieldset>
+          </fieldset></>
         )}
         {error && (
           <p role="alert" className="form-error">

@@ -30,18 +30,25 @@ class ShiftInput(Row):
     employeeId: Id
 
 
+Time = Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")]
+
+
 class Floor(StrictModel):
     id: Id
     name: Name
     color: Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
     workStart: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")] = "09:00"
     workEnd: Annotated[str, Field(pattern=r"^(?:[01]\d|2[0-3]):(?:00|15|30|45)$")] = "17:00"
+    staffWorkStart: Time | None = None
+    staffWorkEnd: Time | None = None
+    employeeOrder: Annotated[list[Id], Field(max_length=1000)] = Field(default_factory=list)
 
 
 class Employee(StrictModel):
     id: Id
     name: Name
     floorIds: Annotated[list[Id], Field(max_length=100)]
+    employmentType: Literal["partTime", "staff"] = "partTime"
 
 
 class CommandBase(StrictModel):

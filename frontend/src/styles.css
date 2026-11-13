@@ -2458,3 +2458,15 @@ textarea:focus-visible {
 .inline-shift .full-time-choice input { width:18px; height:18px; padding:0; }
 
 .full-time-badge { font-weight:700; }
+
+.floor-order-list { list-style:none; margin:16px 0; padding:0; display:grid; gap:8px; max-height:55vh; overflow:auto; }
+.floor-order-list li { display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid #ccd8d0; border-radius:8px; padding:10px; background:white; }
+.floor-order-list li[draggable="true"] { cursor:grab; }
+.floor-order-list li div { display:flex; gap:6px; }
+.employee-kind { display:block; color:#64756b; font-size:12px; }
+.period-floor-heading { padding:16px 20px; font-weight:700; }
+
+.day-plan { font-size:12px; font-weight:700; border-radius:999px; padding:4px 9px; white-space:nowrap; }
+.day-plan small { font-size:inherit; font-weight:400; }
+.day-plan.work { background:#e3f3eb; color:#24553e; }
+.day-plan.rest { background:#eef1f4; color:#475569; }

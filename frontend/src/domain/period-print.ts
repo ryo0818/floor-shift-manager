@@ -1,4 +1,4 @@
-import { daysOf, dayName, periodLabel, shortDate, statusNames, type Workspace, type Shift } from "./model";
+import { orderedEmployees, daysOf, dayName, periodLabel, shortDate, statusNames, type Workspace, type Shift } from "./model";
 const escape = (value: string) => value.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]!));
 
 /** Export only the admin's loaded workspace and current floor/status/name selection. */
@@ -6,7 +6,7 @@ export function periodPrintHtml(data: Workspace, shifts: Shift[], floorId: strin
   const days = daysOf(data.period);
   const pages = data.floors.filter(f => floorId === "all" || f.id === floorId).map(f => {
     const rows = shifts.filter(s => s.floorId === f.id && days.includes(s.date));
-    const people = data.employees.filter(e => rows.some(s => s.employeeId === e.id));
+    const people = orderedEmployees(data.employees, f).filter(e => rows.some(s => s.employeeId === e.id));
     const body = people.map(e => `<tr><th scope="row">${escape(e.name)}</th>${days.map(day => {
       const cells = rows.filter(s => s.employeeId === e.id && s.date === day).sort((a,b) => a.start.localeCompare(b.start));
       return `<td>${cells.map(s => `<div class="shift ${s.status}"><b>${escape(s.start)}-${escape(s.end)}</b><span>${escape(statusNames[s.status])}</span>${s.fullTime ? '<strong>フルタイム</strong>' : ''}</div>`).join('') || '<span class="empty">—</span>'}</td>`;

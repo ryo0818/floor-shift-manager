@@ -138,7 +138,7 @@ export function readDemo(id: string): Workspace {
   const own = employees.filter((e) => e.id === session!.employeeId);
   const ids = own[0]?.floorIds || [];
   return copy({
-    floors: admin ? floors : floors.filter((f) => ids.includes(f.id)),
+    floors: admin ? floors : floors.filter((f) => ids.includes(f.id)).map(({employeeOrder: _order, ...f})=>f),
     employees: admin ? employees : own,
     period: b.period,
     submissions: admin
@@ -191,7 +191,7 @@ export function commandDemo(id: string, c: Command) {
             throw new Error("過去日の希望は入力・変更できません。");
           continue;
         }
-        Object.assign(row, resolveFullTime(row, floors));
+        Object.assign(row, resolveFullTime(row, floors, e.employmentType));
         validateRow(row, b.period, e.floorIds);
       }
       if (c.note.length > 1000)
@@ -207,38 +207,30 @@ export function commandDemo(id: string, c: Command) {
     editable.forEach((r) => validateRow(r, b.period, e.floorIds));
     if (conflicts(editable).length && !c.acknowledgeOverlap)
       throw new Error("重複する希望があります。確認してから提出してください。");
-    if (b.shifts.some((r) => r.employeeId === e.id && r.date >= currentDate && r.status !== "pending"))
-      throw new Error(
-        "管理者が処理済みのシフトがあります。再提出は管理者にご相談ください。",
-      );
+    const previousIds = new Set(s.submittedRows.map(r=>r.id));
+    const previous = new Map(b.shifts.filter(r=>r.employeeId===e.id && previousIds.has(r.original.id)).map(r=>[r.original.id,r]));
+    const keep = b.shifts.filter(r=>r.employeeId!==e.id || r.date<currentDate || !previousIds.has(r.original.id));
+    const same = (a:Row,b:Row) => a.id===b.id && a.date===b.date && a.floorId===b.floorId && a.start===b.start && a.end===b.end && a.note===b.note && !!a.fullTime===!!b.fullTime;
+    const updated: Shift[] = [];
+    for (const row of editable) {
+      const old = previous.get(row.id);
+      if (old && old.date < currentDate) {
+        if (!same(row,old.original)) throw new Error("過去日の勤務に対応する希望は変更できません。");
+        continue;
+      }
+      updated.push(old && same(row,old.original) ? old : {...copy(row),id:old?.id ?? crypto.randomUUID(),employeeId:e.id,status:"pending",original:copy(row)});
+    }
     s.submittedRows = copy([...s.submittedRows.filter(r => r.date < currentDate), ...editable]);
     s.submittedNote = s.draftNote;
     s.submittedAt = new Date().toISOString();
     s.dirty = false;
-    b.shifts = b.shifts
-      .filter((r) => r.employeeId !== e.id || r.date < currentDate)
-      .concat(
-        editable.map((r) => ({
-          ...copy(r),
-          employeeId: e.id,
-          status: "pending",
-          original: copy(r),
-        })),
-      );
+    b.shifts = [...keep,...updated];
     return;
   }
   if (session.role !== "admin") throw new Error("管理者のみ操作できます。");
   if (c.type === "setDeadline") {
     if (c.deadline !== null && !Number.isFinite(Date.parse(c.deadline)))
       throw new Error("有効な締切日時を入力してください。");
-    if (
-      (c.deadline === null || Date.parse(c.deadline) > Date.now()) &&
-      b.period.deadline && Date.parse(b.period.deadline) <= Date.now() &&
-      b.shifts.some((s) => s.date >= currentDate && s.status !== "pending")
-    )
-      throw new Error(
-        "確定・見送り済みがあります。未確定に戻してから受付を再開してください。",
-      );
     b.period.deadline = c.deadline;
     return;
   }
@@ -249,6 +241,7 @@ export function commandDemo(id: string, c: Command) {
         throw new Error("この従業員にはシフト・提出履歴・保存済み下書きがあるため削除できません（全期間）。");
     }
     employees = employees.filter(e=>e.id!==c.id);
+    floors = floors.map(f=>(f.employeeOrder ? {...f,employeeOrder:f.employeeOrder.filter(id=>id!==c.id)} : f));
     return;
   }
   if (c.type === "deleteFloor") {
@@ -264,6 +257,10 @@ export function commandDemo(id: string, c: Command) {
   }
   if (c.type === "saveFloor") {
     const f = c.floor;
+    const order = f.employeeOrder ?? [];
+    if (new Set(order).size !== order.length || order.some(id=>!employees.some(e=>e.id===id && e.floorIds.includes(f.id)))) throw new Error("並び順の従業員を確認してください。");
+    const staffHours = floorHours(f, "staff");
+    if (!times.includes(staffHours.start) || !times.includes(staffHours.end) || staffHours.start >= staffHours.end) throw new Error("社員のフルタイムの時間を確認してください。");
     const hours = floorHours(f);
     if (!times.includes(hours.start) || !times.includes(hours.end) || hours.start >= hours.end) throw new Error("フルタイムの終了は開始より後にしてください。");
     if (!f.name.trim() || f.name.length > 50 || !/^#[\da-f]{6}$/i.test(f.color))
@@ -277,17 +274,19 @@ export function commandDemo(id: string, c: Command) {
   }
   if (c.type === "saveEmployee") {
     const e = c.employee;
+    if (e.employmentType && !["partTime", "staff"].includes(e.employmentType)) throw new Error("従業員区分を確認してください。");
     if (!e.name.trim() || e.name.length > 50)
       throw new Error("氏名を50文字以内で入力してください。");
     if (e.floorIds.some((id) => !floors.some((f) => f.id === id)))
       throw new Error("フロアを確認してください。");
+    floors = floors.map(f => e.floorIds.includes(f.id) || !f.employeeOrder ? f : {...f, employeeOrder:f.employeeOrder.filter(id=>id!==e.id)});
     employees = employees
       .filter((x) => x.id !== e.id)
       .concat({ ...e, name: e.name.trim() });
     return;
   }
   if (c.type === "saveShift") {
-    const r = resolveFullTime(c.shift, floors);
+    const r = resolveFullTime(c.shift, floors, employees.find(e=>e.id===c.shift.employeeId)?.employmentType);
     validateRow(
       r,
       b.period,

@@ -30,3 +30,8 @@ test('ポップアップ拒否はエラー、印刷はフォント読込後に�
  let printed=0,content='';const popup={opener:{},closed:false,focus(){},print(){printed++},document:{write(h){content=h},close(){},getElementById(){return {addEventListener(){}}},fonts:{ready:Promise.resolve()}}};
  global.window={open:()=>popup};pdf.printPeriod(data,shifts,'all','すべて');await Promise.resolve();assert.equal(printed,1);assert.equal(popup.opener,null);assert.match(content,/シフト半月表/);delete global.window;
 });
+test('PDFの行はフロア固有の従業員順になる',()=>{
+ const input={...data,floors:[{id:'f1',name:'ホール',employeeOrder:['e2','e1']}]};
+ const html=pdf.periodPrintHtml(input,[shifts[0],{...shifts[1],floorId:'f1'}],'f1','全件');
+ assert.ok(html.indexOf('従業員2') < html.indexOf('岡田 &amp; 稜'));
+});

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   minutes,
+  orderedEmployees,
   initialDisplayDate,
   headcount,
   daysOf,
@@ -178,7 +179,7 @@ export function Timeline({
                       </div>
                     </div>
                   ))}
-                  {data.employees
+                  {orderedEmployees(data.employees, f)
                     .filter((e) => shown.some((s) => s.employeeId === e.id))
                     .map((e) => {
                       const shifts = shown.filter((s) => s.employeeId === e.id);

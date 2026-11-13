@@ -77,3 +77,21 @@ test('フルタイムのメモは重複せず解除・ドラッグで自動表�
  assert.equal(m.resolveFullTime({...full,fullTime:false},[]).note,'相談あり');
  assert.equal(drag.dragShift(full,15,'end').note,'相談あり');
 });
+test('フロア別の順番は独立し、社員とアルバイトでフルタイムが異なる',()=>{
+ const {m,d}=setup();const floor={id:'f1',name:'区分テスト',color:'#123456',workStart:'18:00',workEnd:'22:00',staffWorkStart:'09:00',staffWorkEnd:'18:00',employeeOrder:['e2','e1']};
+ const people=[{id:'e1'},{id:'e2'},{id:'e3'}];assert.deepEqual(m.orderedEmployees(people,floor).map(e=>e.id),['e2','e1','e3']);
+ assert.deepEqual(m.orderedEmployees(people,{...floor,employeeOrder:['e1','e2']}).map(e=>e.id),['e1','e2','e3']);
+ const row={id:'r',date:'2030-04-01',start:'10:00',end:'17:00',floorId:'f1',note:'',fullTime:true};
+ assert.equal(m.resolveFullTime(row,[floor],'staff').start,'09:00');assert.equal(m.resolveFullTime(row,[floor],'partTime').start,'18:00');
+ const id=m.movePeriod(m.periodOf(m.today()),3);d.demoLogin('admin','demo1234');d.commandDemo(id,{type:'saveFloor',floor});
+ const employee=d.readDemo(id).employees.find(e=>e.id==='e1');d.commandDemo(id,{type:'saveEmployee',employee:{...employee,employmentType:'staff'}});
+ d.demoEmployee('e1');d.commandDemo(id,{type:'saveDraft',rows:[{...row,date:id}],note:''});assert.equal(d.readDemo(id).submissions[0].draftRows[0].start,'09:00');
+});
+test('確定後の再提出は変更した希望だけ未確定に戻す',()=>{
+ const {m,d}=setup();const id=m.movePeriod(m.periodOf(m.today()),3);
+ const a={id:'a',date:id,start:'18:00',end:'19:00',floorId:'f1',note:''},b={...a,id:'b',date:id.slice(0,8)+String(Number(id.slice(8))+1).padStart(2,'0')};
+ d.demoEmployee('e1');d.commandDemo(id,{type:'saveDraft',rows:[a,b],note:''});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});
+ d.demoLogin('admin','demo1234');const before=d.readDemo(id).shifts;d.commandDemo(id,{type:'setStatus',ids:before.map(s=>s.id),status:'confirmed'});
+ d.demoEmployee('e1');d.commandDemo(id,{type:'saveDraft',rows:[{...a,end:'20:00'},b],note:''});d.commandDemo(id,{type:'submit',acknowledgeOverlap:false});
+ d.demoLogin('admin','demo1234');const after=d.readDemo(id).shifts;assert.equal(after.find(s=>s.original.id==='a').status,'pending');assert.equal(after.find(s=>s.original.id==='b').status,'confirmed');assert.deepEqual(after.map(s=>s.id),before.map(s=>s.id));
+});
