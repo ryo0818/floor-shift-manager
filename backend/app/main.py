@@ -116,7 +116,7 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
             ok = auth.verify_password(
                 account["password_hash"] if account else None, body.password
             )
-            if not account or not ok:
+            if not account or not ok or auth.session_user(con, {"login": body.id}) is None:
                 auth.record_failure(con, keys)
                 return JSONResponse(
                     {"message": "ログインIDまたはパスワードが違います。"},
@@ -255,6 +255,8 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
                 con.execute("DELETE FROM floors WHERE id=%s", (body.id,))
             else:
                 apply(state, user, body.model_dump())
+            if body.type == "setEmployeeActive" and not body.active:
+                con.execute("DELETE FROM sessions WHERE login IN (SELECT login FROM accounts WHERE employee_id=%s)", (body.id,))
             db.save(con, state)
             if new_employee:
                 auth.issue_employee_account(con, body.employee.id)

@@ -125,7 +125,7 @@ export function demoLogin(id: string, password: string) {
 }
 export function demoEmployee(id: string) {
   const e = employees.find((e) => e.id === id);
-  if (!e) throw new Error("従業員が見つかりません。");
+  if (!e || e.active === false) throw new Error("従業員が見つかりません。");
   session = { role: "employee", name: e.name, employeeId: e.id };
   return copy(session);
 }
@@ -133,7 +133,7 @@ export function demoLogout() {
   session = null;
 }
 export function readDemo(id: string): Workspace {
-  if (!session) throw new Error("ログインしてください。");
+  if (!session || (session.role === "employee" && employees.find(e=>e.id===session!.employeeId)?.active === false)) throw new Error("ログインしてください。");
   const b = get(id);
   const admin = session.role === "admin";
   const own = employees.filter((e) => e.id === session!.employeeId);
@@ -151,6 +151,7 @@ export function readDemo(id: string): Workspace {
         }))
       : b.submissions.filter((s) => s.employeeId === session!.employeeId).map(({latestChanges:_changes,...s})=>s),
     shifts: admin ? b.shifts : [],
+    confirmedSchedule: admin ? [] : b.shifts.filter(s=>s.employeeId===session!.employeeId && s.status==="confirmed").map(s=>({id:s.id,date:s.date,start:s.start,end:s.end,floorId:s.floorId,fullTime:s.fullTime,floorName:floors.find(f=>f.id===s.floorId)?.name ?? "未登録"})),
     policy: { allowEarlyConfirm: false },
   });
 }
@@ -172,7 +173,7 @@ function ownSubmission(b: Bucket) {
 }
 export function commandDemo(id: string, c: Command) {
   c = copy(c);
-  if (!session) throw new Error("ログインしてください。");
+  if (!session || (session.role === "employee" && employees.find(e=>e.id===session!.employeeId)?.active === false)) throw new Error("ログインしてください。");
   const b = get(id);
   const currentDate = today();
   if (c.type === "saveDraft" || c.type === "submit") {
@@ -289,8 +290,14 @@ export function commandDemo(id: string, c: Command) {
       .concat({ ...f, name: f.name.trim() });
     return;
   }
+  if (c.type === "setEmployeeActive") {
+    const e = employees.find(e=>e.id===c.id);
+    if (!e) throw new Error("従業員が見つかりません。");
+    e.active = c.active;
+    return;
+  }
   if (c.type === "saveEmployee") {
-    const e = c.employee;
+    const e = {...c.employee, active: employees.find(x=>x.id===c.employee.id)?.active ?? true};
     if (e.employmentType && !["partTime", "staff"].includes(e.employmentType)) throw new Error("従業員区分を確認してください。");
     if (!e.name.trim() || e.name.length > 50)
       throw new Error("氏名を50文字以内で入力してください。");
@@ -312,6 +319,7 @@ export function commandDemo(id: string, c: Command) {
     if (!employees.some((e) => e.id === r.employeeId))
       throw new Error("従業員を選択してください。");
     const old = b.shifts.find((x) => x.id === r.id);
+    if (employees.find(e=>e.id===r.employeeId)?.active === false && (!old || old.employeeId!==r.employeeId)) throw new Error("退職者へ新しいシフトを追加できません。");
     if (r.date < currentDate || (old && old.date < currentDate))
       throw new Error("過去日のシフトは入力・変更できません。");
     if (old && old.status !== "pending")
@@ -348,6 +356,7 @@ export function commandDemo(id: string, c: Command) {
     return;
   }
   if (c.type === "setStatus") {
+    if (c.status === "confirmed" && b.shifts.some(s=>c.ids.includes(s.id) && employees.find(e=>e.id===s.employeeId)?.active===false)) throw new Error("退職者のシフトは確定できません。");
     const ids = new Set(c.ids);
     const target = b.shifts.filter((x) => ids.has(x.id));
     if (!ids.size || target.length !== ids.size)

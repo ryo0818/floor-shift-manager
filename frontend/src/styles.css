@@ -2485,3 +2485,14 @@ textarea:focus-visible {
 .request-change { border-left:3px solid #b97518; background:#fff8e9; padding:8px 10px; margin:8px 0; overflow-wrap:anywhere; }
 .request-change strong,.change-badge { color:#86520e; font-size:12px; }
 .request-change p { margin:4px 0; font-size:12px; white-space:pre-wrap; }
+
+.own-schedule, .change-attention { margin: 18px 0; padding: 18px; border: 1px solid #b7dcd7; border-radius: 12px; background: #f2faf8; }
+.own-schedule summary { cursor: pointer; font-weight: 700; }
+.own-schedule p, .change-attention p { font-size: 13px; color: #465968; margin: 10px 0; }
+.schedule-scroll { overflow-x: auto; }
+.own-schedule table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.own-schedule th, .own-schedule td { padding: 12px; border-bottom: 1px solid #d4e4e0; text-align: left; vertical-align: top; min-width: 135px; }
+.own-schedule th:first-child { min-width: 95px; }
+.confirmed-work strong { color: #087b68; }
+.change-attention { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.change-attention p { flex-basis: 100%; }

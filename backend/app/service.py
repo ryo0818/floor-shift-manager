@@ -119,6 +119,13 @@ def project(state, user, revision):
         "period": deepcopy(state["period"]),
         "submissions": submissions,
         "shifts": deepcopy(state["shifts"]) if admin else [],
+        "confirmedSchedule": [] if admin else [
+            {**{k: s[k] for k in ("id", "date", "start", "end", "floorId")},
+             "fullTime": s.get("fullTime", False),
+             "floorName": next((f["name"] for f in state["floors"] if f["id"] == s["floorId"]), "未登録")}
+            for s in state["shifts"]
+            if s["employeeId"] == user.get("employeeId") and s["status"] == "confirmed"
+        ],
         "revision": revision,
         "policy": {"allowEarlyConfirm": False},
     }
@@ -138,7 +145,7 @@ def apply(state, user, c, now=None):
         employee = next(
             (e for e in state["employees"] if e["id"] == user["employeeId"]), None
         )
-        if not employee:
+        if not employee or employee.get("active", True) is False:
             raise RuleError("従業員が見つかりません。", 403)
         submission = next(
             (s for s in state["submissions"] if s["employeeId"] == employee["id"]), None
@@ -244,8 +251,15 @@ def apply(state, user, c, now=None):
         if any(x["id"] != f["id"] and x["name"] == f["name"] for x in state["floors"]):
             raise RuleError("同じフロア名があります。")
         state["floors"] = [x for x in state["floors"] if x["id"] != f["id"]] + [f]
+    elif kind == "setEmployeeActive":
+        employee = next((e for e in state["employees"] if e["id"] == c["id"]), None)
+        if not employee:
+            raise RuleError("従業員が見つかりません。", 404)
+        employee["active"] = c["active"]
     elif kind == "saveEmployee":
         e = deepcopy(c["employee"])
+        old_employee = next((x for x in state["employees"] if x["id"] == e["id"]), None)
+        e["active"] = old_employee.get("active", True) if old_employee else True
         e["name"] = e["name"].strip()
         if not e["name"]:
             raise RuleError("氏名を入力してください。")
@@ -262,6 +276,9 @@ def apply(state, user, c, now=None):
         if not any(e["id"] == row["employeeId"] for e in state["employees"]):
             raise RuleError("従業員を選択してください。")
         old = next((s for s in shifts if s["id"] == row["id"]), None)
+        employee = next(e for e in state["employees"] if e["id"] == row["employeeId"])
+        if employee.get("active", True) is False and (not old or old["employeeId"] != row["employeeId"]):
+            raise RuleError("退職者へ新しいシフトを追加できません。", 409)
         if row["date"] < today or (old and old["date"] < today):
             raise RuleError("過去日のシフトは入力・変更できません。", 409)
         if old and old["status"] != "pending":
@@ -306,6 +323,9 @@ def apply(state, user, c, now=None):
         ):
             raise RuleError("状態が変わっています。再確認してください。", 409)
         if status == "confirmed":
+            inactive = {e["id"] for e in state["employees"] if e.get("active", True) is False}
+            if any(s["employeeId"] in inactive for s in target):
+                raise RuleError("退職者のシフトは確定できません。対象から外してください。", 409)
             if period["deadline"] and instant(period["deadline"]) > now:
                 raise RuleError("締切を設定した期間は、締切後に確定できます。", 409)
             rows = [s for s in shifts if s["status"] == "confirmed" or s["id"] in ids]

@@ -49,6 +49,7 @@ class Employee(StrictModel):
     name: Name
     floorIds: Annotated[list[Id], Field(max_length=100)]
     employmentType: Literal["partTime", "staff"] = "partTime"
+    active: bool = True
 
 
 class CommandBase(StrictModel):
@@ -104,6 +105,12 @@ class DeleteEmployee(CommandBase):
     id: Id
 
 
+class SetEmployeeActive(CommandBase):
+    type: Literal["setEmployeeActive"]
+    id: Id
+    active: bool
+
+
 class SaveEmployee(CommandBase):
     type: Literal["saveEmployee"]
     employee: Employee
@@ -121,6 +128,7 @@ Command = Annotated[
         DeleteFloor,
         DeleteEmployee,
         SaveEmployee,
+        SetEmployeeActive,
     ],
     Field(discriminator="type"),
 ]

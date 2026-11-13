@@ -139,6 +139,8 @@ def session_user(con, session):
     if not row:
         return None
     employee = row["data"]
+    if employee.get("active", True) is False:
+        return None
     return {"role": "employee", "name": employee["name"], "employeeId": employee["id"], "mustChangePassword": account["must_change_password"]}
 
 
