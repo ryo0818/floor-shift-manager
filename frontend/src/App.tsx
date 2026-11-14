@@ -296,10 +296,11 @@ export default function App() {
     const t = setInterval(() => setClock(Date.now()), 10000);
     return () => clearInterval(t);
   }, []);
-  const load = useCallback(async () => {
+  const load = useCallback(async (preserveView = false) => {
     if (!session || session.mustChangePassword) return;
     const seq = ++sequence.current;
-    setLoading(true);
+    // Keep the timeline DOM mounted during a save refresh, including its scroll offsets.
+    if (!preserveView) setLoading(true);
     setError("");
     try {
       const d = await api.load(period);
@@ -316,8 +317,10 @@ export default function App() {
       setSelected([]);
     } catch (e) {
       if (seq === sequence.current) {
-        setData(null);
-        setError((e as Error).message);
+        if (!preserveView) setData(null);
+        const message = preserveView ? `保存後の再読み込みに失敗しました。再読み込みして最新の状態を確認してください。${(e as Error).message}` : (e as Error).message;
+        setError(message);
+        if (preserveView) throw new Error(message);
       }
     } finally {
       if (seq === sequence.current) setLoading(false);
@@ -353,7 +356,7 @@ export default function App() {
     setError("");
     try {
       await api.command(period, c);
-      await load();
+      await load(true);
       toast.success(msg);
     } catch (e) {
       setError((e as Error).message);
