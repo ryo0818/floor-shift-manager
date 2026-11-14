@@ -12,6 +12,7 @@ import {
   conflicts,
   expired,
   makePeriod,
+  periodSelectable,
   movePeriod,
   periodOf,
   today,
@@ -62,6 +63,7 @@ function get(id: string) {
   return b;
 }
 function seed(id: string, closed: boolean) {
+  if (!periodSelectable(id)) throw new Error("1か月より前の期間は選択できません。");
   const b = get(id);
   b.period.deadline = new Date(
     Date.now() + (closed ? -1 : 5) * 86400000,
@@ -134,6 +136,7 @@ export function demoLogout() {
 }
 export function readDemo(id: string): Workspace {
   if (!session || (session.role === "employee" && employees.find(e=>e.id===session!.employeeId)?.active === false)) throw new Error("ログインしてください。");
+  if (!periodSelectable(id)) throw new Error("1か月より前の期間は選択できません。");
   const b = get(id);
   const admin = session.role === "admin";
   const own = employees.filter((e) => e.id === session!.employeeId);
@@ -174,6 +177,7 @@ function ownSubmission(b: Bucket) {
 export function commandDemo(id: string, c: Command) {
   c = copy(c);
   if (!session || (session.role === "employee" && employees.find(e=>e.id===session!.employeeId)?.active === false)) throw new Error("ログインしてください。");
+  if (!periodSelectable(id)) throw new Error("1か月より前の期間は選択できません。");
   const b = get(id);
   const currentDate = today();
   if (c.type === "saveDraft" || c.type === "submit") {

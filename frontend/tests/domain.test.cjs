@@ -136,3 +136,14 @@ test('従業員への確定予定は本人の確定分だけでメモや他人�
  assert.ok(result.confirmedSchedule.some(s=>s.id===pending.id));assert.equal(result.shifts.length,0);
  for(const row of result.confirmedSchedule){assert.equal('note' in row,false);assert.equal('original' in row,false);assert.equal('employeeId' in row,false);}
 });
+
+test('1か月前は日本時間の暦月で計算し月末・年越しを補正する',()=>{
+ const {m}=setup();
+ assert.equal(m.earliestSelectableDate('2026-11-14'),'2026-10-14');
+ assert.equal(m.earliestSelectableDate('2026-03-31'),'2026-02-28');
+ assert.equal(m.earliestSelectableDate('2028-03-31'),'2028-02-29');
+ assert.equal(m.earliestSelectableDate('2026-01-16'),'2025-12-16');
+ assert.equal(m.periodSelectable('2026-10-01','2026-11-16'),false);
+ assert.equal(m.periodSelectable('2026-10-16','2026-11-16'),true);
+ assert.equal(m.periodSelectable('2026-10-01','2026-11-14'),true);
+});

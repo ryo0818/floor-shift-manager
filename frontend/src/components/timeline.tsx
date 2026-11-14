@@ -5,6 +5,7 @@ import {
   initialDisplayDate,
   headcount,
   daysOf,
+  earliestSelectableDate,
   statusNames,
   type Workspace,
   type Shift,
@@ -40,8 +41,8 @@ export function Timeline({
   onStatus: (ids: string[], status: Status) => void;
 }) {
   const [detail, setDetail] = useState<string | null>(null);
-  const days = daysOf(data.period);
-  const day = days.includes(date) ? date : initialDisplayDate(data.period);
+  const days = daysOf(data.period).filter(d=>d>=earliestSelectableDate());
+  const day = days.includes(date) ? date : (days.includes(initialDisplayDate(data.period)) ? initialDisplayDate(data.period) : days[0]);
   const active = data.shifts.find((s) => s.id === detail);
   const name = (id: string) =>
     (() => { const e = data.employees.find(e=>e.id===id); return e ? `${e.name}${e.active===false ? "（退職）" : ""}` : "未登録"; })();
@@ -63,7 +64,7 @@ export function Timeline({
           <input
             type="date"
             aria-label="タイムラインの日付"
-            min={data.period.start}
+            min={days[0]}
             max={data.period.end}
             value={day}
             onChange={(e) => {

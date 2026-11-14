@@ -58,3 +58,12 @@ def test_session_user_rechecks_employee_status_for_old_sessions(active,allowed):
         def execute(self,query,args):
             return Result(dict(role="employee",employee_id="e1",must_change_password=False) if "FROM accounts" in query else dict(data=employee))
     assert bool(auth.session_user(Connection(),dict(login="emp"))) is allowed
+
+
+def test_recent_month_boundary_clamps_calendar_months():
+    from datetime import date
+    from app.service import earliest_selectable_date
+    assert earliest_selectable_date(date(2026,11,14)) == "2026-10-14"
+    assert earliest_selectable_date(date(2026,3,31)) == "2026-02-28"
+    assert earliest_selectable_date(date(2028,3,31)) == "2028-02-29"
+    assert earliest_selectable_date(date(2026,1,16)) == "2025-12-16"
