@@ -60,6 +60,8 @@ import {
   Status,
   Submission,
   Workspace,
+  earliestSelectableDate,
+  periodSelectable,
   initialDisplayDate,
   adminListShifts,
   conflicts,
@@ -381,6 +383,10 @@ export default function App() {
     else action();
   }
   function changePeriod(id: string) {
+    if (!periodSelectable(id)) {
+      setError("1か月より前の期間は選択できません。");
+      return;
+    }
     guard(() => {
       setData(null);
       setPeriod(id);
@@ -547,7 +553,7 @@ export default function App() {
               <div className="arrows">
                 <button
                   aria-label="前の半月"
-                  disabled={busy}
+                  disabled={busy || !periodSelectable(movePeriod(period,-1),today(clock))}
                   onClick={() => changePeriod(movePeriod(period, -1))}
                 >
                   <ChevronLeft size={18} />
@@ -563,6 +569,7 @@ export default function App() {
               <input
                 type="month"
                 aria-label="対象月"
+                min={earliestSelectableDate(today(clock)).slice(0,7)}
                 value={period.slice(0, 7)}
                 disabled={busy}
                 onChange={(e) => {
@@ -576,7 +583,7 @@ export default function App() {
                   value={period.slice(8)}
                   onChange={(v) => changePeriod(period.slice(0, 8) + v)}
                   items={[
-                    { id: "01", name: "前半 1〜15日" },
+                    { id: "01", name: "前半 1〜15日", disabled: !periodSelectable(period.slice(0,8)+"01",today(clock)) },
                     { id: "16", name: "後半 16〜末日" },
                   ]}
                 />
@@ -618,6 +625,7 @@ export default function App() {
                     const matching = data.shifts
                       .filter(
                         (s) =>
+                          s.date >= earliestSelectableDate(today(clock)) &&
                           (floor === "all" || s.floorId === floor) &&
                           (!changesOnly || !!s.requestChange) &&
                           (filter === "all" || s.status === filter) &&

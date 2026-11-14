@@ -10,6 +10,17 @@ from zoneinfo import ZoneInfo
 JST = ZoneInfo("Asia/Tokyo")
 
 
+def earliest_selectable_date(current=None):
+    current = current or datetime.now(JST).date()
+    year, month = (current.year - 1, 12) if current.month == 1 else (current.year, current.month - 1)
+    return date(year, month, min(current.day, monthrange(year, month)[1])).isoformat()
+
+
+def require_selectable_period(period):
+    if make_period(period)["end"] < earliest_selectable_date():
+        raise RuleError("1か月より前の期間は選択できません。", 403)
+
+
 class RuleError(Exception):
     def __init__(self, message, status=400):
         super().__init__(message)

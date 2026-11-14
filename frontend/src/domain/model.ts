@@ -73,6 +73,15 @@ export const today = (now = Date.now()) =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
     new Date(now),
   );
+// Calendar month in Japan; clamp to the final day of the previous month.
+export function earliestSelectableDate(current = today()): string {
+  const [y,m,d] = current.split("-").map(Number);
+  const previous = new Date(Date.UTC(y,m-1,0));
+  return `${previous.getUTCFullYear()}-${String(previous.getUTCMonth()+1).padStart(2,"0")}-${String(Math.min(d,previous.getUTCDate())).padStart(2,"0")}`;
+}
+export function periodSelectable(id: string, current = today()): boolean {
+  return makePeriod(id).end >= earliestSelectableDate(current);
+}
 export function periodOf(date: string): string {
   return date.slice(0, 7) + (Number(date.slice(8)) <= 15 ? "-01" : "-16");
 }

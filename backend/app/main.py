@@ -11,7 +11,7 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from . import auth, db
 from .models import Command, Login, CreateAccount, ResetPassword, ChangePassword
-from .service import RuleError, apply, project, delete_floor, delete_employee
+from .service import RuleError, apply, project, delete_floor, delete_employee, require_selectable_period, earliest_selectable_date
 
 
 def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
@@ -222,6 +222,7 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
     def workspace(request: Request, period: Annotated[str, Query(max_length=10)]):
         with db.transaction(database) as con:
             _, user = auth.require_session(con, request)
+            require_selectable_period(period)
             state = db.load(con, period)
             return project(state, user, db.revision(con))
 
@@ -234,7 +235,11 @@ def create_app(database=None, *, secure_cookie=None, allowed_origins=None):
                     "別の画面でデータが更新されています。「再読み込み」してから操作し直してください。",
                     409,
                 )
+            require_selectable_period(body.period)
             state = db.load(con, body.period)
+            target_ids = set(body.ids) if body.type == "setStatus" else ({body.id} if body.type == "deleteShift" else set())
+            if any(s["id"] in target_ids and s["date"] < earliest_selectable_date() for s in state["shifts"]):
+                raise RuleError("1か月より前の日付は選択できません。", 403)
             new_employee = (
                 body.type == "saveEmployee"
                 and all(e["id"] != body.employee.id for e in state["employees"])
