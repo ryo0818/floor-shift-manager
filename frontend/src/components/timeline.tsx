@@ -11,7 +11,7 @@ import {
   type Shift,
   type Status,
 } from "../domain/model";
-import { timelineRange, peakHeadcount } from "../domain/timeline";
+import { timelineRange, peakHeadcount, adjacentTimelineDate } from "../domain/timeline";
 import { RequestChangeView } from "./request-change";
 import { DragBar } from "./drag-bar";
 import { Modal } from "./controls";
@@ -57,8 +57,8 @@ export function Timeline({
       <div className="timeline-toolbar">
         <label><input type="checkbox" checked={fit} onChange={e=>setFit(e.target.checked)}/>時間軸を画面幅に合わせる</label>
         <button
-          disabled={days.indexOf(day) === 0}
-          onClick={() => onDate(days[days.indexOf(day) - 1])}
+          disabled={busy || !day || adjacentTimelineDate(day, -1) < earliestSelectableDate()}
+          onClick={() => onDate(adjacentTimelineDate(day, -1))}
         >
           ← 前日
         </button>
@@ -67,17 +67,17 @@ export function Timeline({
           <input
             type="date"
             aria-label="タイムラインの日付"
-            min={days[0]}
-            max={data.period.end}
+            min={earliestSelectableDate()}
+            disabled={busy}
             value={day}
             onChange={(e) => {
-              if (days.includes(e.target.value)) onDate(e.target.value);
+              if (e.target.validity.valid && e.target.value && e.target.value >= earliestSelectableDate()) onDate(e.target.value);
             }}
           />
         </label>
         <button
-          disabled={days.indexOf(day) === days.length - 1}
-          onClick={() => onDate(days[days.indexOf(day) + 1])}
+          disabled={busy || !day}
+          onClick={() => onDate(adjacentTimelineDate(day, 1))}
         >
           翌日 →
         </button>
