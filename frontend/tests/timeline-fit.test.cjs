@@ -29,3 +29,28 @@ test('画面幅でドラッグしても10時を下回らず、移動時に長さ
  const r=dragShift(shift,-9999,'move',600);assert.equal(r.start,'10:00');assert.equal(r.end,'13:00');
  assert.equal(dragShift(shift,-9999,'start',600).start,'10:00');
 });
+const {originalRequestNote}=load('src/domain/timeline.ts');
+const original={id:'request-1',date:'2030-04-01',start:'18:00',end:'22:00',floorId:'f1',note:'本人のメモ',fullTime:true};
+const changed={...original,start:'19:00',floorId:'f2',fullTime:false,employeeId:'e1',status:'pending',original};
+const requestData={period:{start:'2030-04-01',end:'2030-04-15'},floors:[{id:'f1',name:'ホール'},{id:'f2',name:'キッチン'}],employees:[{id:'e1',name:'山田',floorIds:['f1','f2']}],submissions:[{employeeId:'e1',submittedRows:[original]}],shifts:[changed]};
+test('調整後も提出時の時間・フロア・フルタイムを保持して表示する',()=>{
+ const before=JSON.stringify(requestData);
+ assert.equal(originalRequestNote(changed,requestData),'元の希望：2030-04-01 ／ ホール ／ 18:00〜22:00（フルタイム）');
+ assert.equal(originalRequestNote({...changed,start:'20:00',status:'confirmed'},requestData),originalRequestNote(changed,requestData));
+ assert.equal(JSON.stringify(requestData),before);
+});
+test('元の希望に戻した場合、メモだけの変更、管理者の直接追加には注記しない',()=>{
+ assert.equal(originalRequestNote({...changed,...original,note:'管理者のメモ'},requestData),null);
+ assert.equal(originalRequestNote(changed,{...requestData,submissions:[]}),null);
+});
+test('日付・終了・フルタイムのみの変更も注記する',()=>{
+ for(const patch of [{date:'2030-04-02'},{end:'23:00'},{fullTime:false}]) {
+  assert.ok(originalRequestNote({...changed,...original,...patch},requestData));
+ }
+});
+test('元の希望はホバー不要でチャートの該当バーの下に表示される',()=>{
+ const html=renderToStaticMarkup(React.createElement(Timeline,{data:requestData,visible:[changed],date:'2030-04-01',floor:'all',busy:false,canConfirm:true,earliestEditDate:'2030-04-01',onDate(){},onEdit(){},onStatus(){},onMove(){}}));
+ assert.match(html,/class="timeline-original-note">元の希望：2030-04-01 ／ ホール ／ 18:00〜22:00（フルタイム）<\/div>/);
+ assert.match(html,/timeline-shift-row/);
+ assert.doesNotMatch(html,/height:52px/);
+});
