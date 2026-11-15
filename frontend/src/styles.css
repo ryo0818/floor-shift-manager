@@ -2512,3 +2512,7 @@ textarea:focus-visible {
   .timeline-fit .timeline-axis .minor-hour:not(:first-child):not(:last-child) { display: none; }
   .timeline-fit .timeline-counts span { font-size: 9px; }
 }
+
+.timeline-shift-row { position: relative; min-height: 40px; }
+.timeline-original-note { padding: 42px 6px 8px; font-size: 11px; line-height: 1.5; color: #785019; overflow-wrap: anywhere; }
+.original-request-detail { padding: 10px; background: #fff8e8; color: #785019; overflow-wrap: anywhere; }

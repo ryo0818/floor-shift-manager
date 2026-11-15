@@ -11,7 +11,7 @@ import {
   type Shift,
   type Status,
 } from "../domain/model";
-import { timelineRange, peakHeadcount, adjacentTimelineDate } from "../domain/timeline";
+import { timelineRange, peakHeadcount, originalRequestNote, adjacentTimelineDate } from "../domain/timeline";
 import { RequestChangeView } from "./request-change";
 import { DragBar } from "./drag-bar";
 import { Modal } from "./controls";
@@ -196,14 +196,20 @@ export function Timeline({
                           <div
                             className="timeline-track"
                             style={{
-                              height: shifts.length * 40 + 12,
+                              paddingBottom: 12,
                               backgroundSize: `${(60 / span) * 100}% 100%`,
                             }}
                           >
-                            {shifts.map((s, i) => (
-                              <DragBar key={s.id} shift={s} index={i} from={from} span={span} busy={busy || s.date < earliestEditDate}
-                                name={e.name} onDetail={()=>setDetail(s.id)} onMove={onMove} />
-                            ))}
+                            {shifts.map((s) => {
+                              const originalNote = originalRequestNote(s, data);
+                              return (
+                                <div className="timeline-shift-row" key={s.id}>
+                                  <DragBar shift={s} index={0} from={from} span={span} busy={busy || s.date < earliestEditDate}
+                                    name={e.name} onDetail={()=>setDetail(s.id)} onMove={onMove} />
+                                  {originalNote && <div className="timeline-original-note">{originalNote}</div>}
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       );
@@ -230,6 +236,7 @@ export function Timeline({
           <span className={`status ${active.status}`}>
             {statusNames[active.status]}
           </span>
+          {originalRequestNote(active, data) && <p className="original-request-detail">{originalRequestNote(active, data)}</p>}
           {active.fullTime && <p className="full-time-badge">フルタイム</p>}
           {active.requestChange && <RequestChangeView change={active.requestChange} floors={data.floors}/>}
           <p style={{whiteSpace:"pre-wrap"}}>{active.note || "メモなし"}</p>
