@@ -9,3 +9,10 @@ export function peakHeadcount(rows: Shift[], from: number, to: number) {
   for (let t=from; t<to; t+=15) peak = Math.max(peak, headcount(rows,t,Math.min(t+15,to)));
   return peak;
 }
+
+/** UTC arithmetic keeps calendar-day navigation independent of host timezone/DST. */
+export function adjacentTimelineDate(date: string, offset: -1 | 1) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + offset);
+  return value.toISOString().slice(0, 10);
+}
