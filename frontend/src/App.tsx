@@ -393,6 +393,18 @@ export default function App() {
       setSelected([]);
     });
   }
+  function changeTimelineDate(date: string) {
+    if (busy || loading || date < earliestSelectableDate()) return;
+    const nextPeriod = periodOf(date);
+    guard(() => {
+      setTimelineDate(date);
+      setSelected([]);
+      if (nextPeriod !== period) {
+        setData(null);
+        setPeriod(nextPeriod);
+      }
+    });
+  }
   function newRow(date?: string): Row {
     return {
       id: crypto.randomUUID(),
@@ -842,7 +854,7 @@ export default function App() {
                               visible={visible}
                               floor={floor}
                               date={timelineDate}
-                              onDate={setTimelineDate}
+                              onDate={changeTimelineDate}
                               busy={busy}
                               canConfirm={canConfirm}
                               earliestEditDate={today(clock)}

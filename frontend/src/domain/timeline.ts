@@ -23,3 +23,10 @@ export function originalRequestNote(shift: Shift, data: Pick<Workspace, "submiss
   const floor = data.floors.find(f => f.id === original.floorId)?.name ?? original.floorId;
   return `元の希望：${original.date} ／ ${floor} ／ ${original.start}〜${original.end}${original.fullTime ? "（フルタイム）" : ""}`;
 }
+
+/** UTC arithmetic keeps calendar-day navigation independent of host timezone/DST. */
+export function adjacentTimelineDate(date: string, offset: -1 | 1) {
+  const value = new Date(`${date}T12:00:00Z`);
+  value.setUTCDate(value.getUTCDate() + offset);
+  return value.toISOString().slice(0, 10);
+}

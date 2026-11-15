@@ -54,3 +54,21 @@ test('元の希望はホバー不要でチャートの該当バーの下に表�
  assert.match(html,/timeline-shift-row/);
  assert.doesNotMatch(html,/height:52px/);
 });
+
+test('翌日・前日は半月境界、月末、年末、うるう日をまたぐ',()=>{
+ const {adjacentTimelineDate}=load('src/domain/timeline.ts');
+ for(const [date,offset,expected] of [
+  ['2030-04-15',1,'2030-04-16'],['2030-04-16',-1,'2030-04-15'],
+  ['2030-04-30',1,'2030-05-01'],['2030-05-01',-1,'2030-04-30'],
+  ['2030-12-31',1,'2031-01-01'],['2031-01-01',-1,'2030-12-31'],
+  ['2028-02-28',1,'2028-02-29'],['2028-02-29',1,'2028-03-01']
+ ]) assert.equal(adjacentTimelineDate(date,offset),expected);
+});
+test('半月末でも翌日を操作でき、保存中は日付操作を無効化',()=>{
+ const data={period:{start:'2030-04-01',end:'2030-04-15'},floors:[],employees:[],shifts:[]};
+ const props={data,visible:[],date:'2030-04-15',floor:'all',busy:false,canConfirm:true,earliestEditDate:'2030-04-01',onDate(){},onEdit(){},onStatus(){},onMove(){}};
+ const html=renderToStaticMarkup(React.createElement(Timeline,props));
+ assert.match(html,/<button>翌日 →<\/button>/);assert.doesNotMatch(html,/max="2030-04-15"/);
+ const busy=renderToStaticMarkup(React.createElement(Timeline,{...props,busy:true}));
+ assert.match(busy,/<button disabled="">翌日 →<\/button>/);assert.match(busy,/type="date"[^>]*disabled=""/);
+});
