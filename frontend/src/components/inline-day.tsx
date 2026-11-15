@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { defaultShiftTimes, timeSelection, startTimes, resolveFullTime, times, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
+import { defaultShiftTimes, timeSelection, startTimes, endTimes, resolveFullTime, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
 export function InlineDay({ date, rows, floors, period, disabled, employmentType = "partTime", past = false, onChange, onRemove, onRest }: {
   date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; employmentType?: EmploymentType; past?: boolean;
   onChange: (r: Row) => void; onRemove: (r: Row) => void; onRest: () => void;
@@ -36,7 +36,7 @@ export function InlineDay({ date, rows, floors, period, disabled, employmentType
           </select></label>
           <span aria-hidden="true">〜</span>
           <label>終了<select aria-label={`${shortDate(date)} 希望${index+1} 終了`} value={row.end} disabled={!!row.fullTime} onChange={e=>change({end:e.target.value})}>
-            <option value="">未入力</option>{times.map(t=><option key={t} value={t}>{t}</option>)}
+            <option value="">未入力</option>{row.end && !endTimes.includes(row.end) && <option value={row.end} disabled>{row.end}（保存済み）</option>}{endTimes.map(t=><option key={t} value={t}>{t}</option>)}
           </select></label>
         </div>
         <label>メモ（任意）<input aria-label={`${shortDate(date)} 希望${index+1} メモ`} maxLength={500} value={row.note} placeholder="この時間帯についての希望" onChange={e=>change({note:e.target.value})}/></label>

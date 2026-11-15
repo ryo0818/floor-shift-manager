@@ -10,6 +10,7 @@ import {
   conflicts,
   times,
   startTimes,
+  endTimes,
   defaultShiftTimes,
   timeSelection,
   floorHours,
@@ -143,7 +144,7 @@ export function ShiftEditor({
               disabled={!!r.fullTime}
               value={r.end}
               onChange={(v) => change({ end: v })}
-              items={times.map((t) => ({ id: t, name: t }))}
+              items={[...(!endTimes.includes(r.end) ? [r.end] : []), ...endTimes].map(t=>({id:t,name:t,disabled:!endTimes.includes(t)}))}
             />
           </label>
         </div>

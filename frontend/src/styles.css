@@ -2496,3 +2496,19 @@ textarea:focus-visible {
 .confirmed-work strong { color: #087b68; }
 .change-attention { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
 .change-attention p { flex-basis: 100%; }
+
+/* Fit the time axis without removing precise 15-minute editing in detailed mode. */
+.timeline-fit { min-width: 0; }
+.timeline-fit .timeline-scroll { padding-right: 0; }
+.timeline-fit .timeline-canvas { width: 100%; min-width: 0; }
+.timeline-fit .timeline-axis span:last-child { transform: translateX(-100%); }
+.timeline-fit .timeline-label { width: 120px; overflow-wrap: anywhere; }
+.timeline-label small { display: block; font-size: 10px; font-weight: normal; }
+.timeline-fit .timeline-bar { min-width: 0; padding: 4px 0; }
+.timeline-fit .timeline-bar > span:not(.drag-handle) { display: block; overflow: hidden; text-overflow: ellipsis; }
+.timeline-fit .timeline-bar .drag-handle { width: 6px; font-size: 9px; }
+@media (max-width: 640px) {
+  .timeline-fit .timeline-label { width: 76px; padding: 9px 4px; font-size: 11px; }
+  .timeline-fit .timeline-axis .minor-hour:not(:first-child):not(:last-child) { display: none; }
+  .timeline-fit .timeline-counts span { font-size: 9px; }
+}
