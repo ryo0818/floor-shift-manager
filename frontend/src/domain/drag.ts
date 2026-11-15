@@ -2,13 +2,13 @@ import { fullTimeNote, minutes, type Shift } from "./model";
 export type DragMode = "move" | "start" | "end";
 const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v));
 const time = (v: number) => `${String(Math.floor(v / 60)).padStart(2, "0")}:${String(v % 60).padStart(2, "0")}`;
-export function dragShift(shift: Shift, deltaMinutes: number, mode: DragMode): Shift {
+export function dragShift(shift: Shift, deltaMinutes: number, mode: DragMode, minimumStart = 0): Shift {
   const delta = Math.round(deltaMinutes / 15) * 15;
   let start = minutes(shift.start), end = minutes(shift.end);
   if (mode === "move") {
-    const offset = clamp(delta, -start, 1425 - end);
+    const offset = clamp(delta, minimumStart-start, 1425 - end);
     start += offset; end += offset;
-  } else if (mode === "start") start = clamp(start + delta, 0, end - 15);
+  } else if (mode === "start") start = clamp(start + delta, minimumStart, end - 15);
   else end = clamp(end + delta, start + 15, 1425);
   return { ...shift, start: time(start), end: time(end), ...(start !== minutes(shift.start) || end !== minutes(shift.end) ? {fullTime:false, note:fullTimeNote(shift.note, false)} : {}) };
 }

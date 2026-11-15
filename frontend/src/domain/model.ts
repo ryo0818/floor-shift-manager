@@ -128,6 +128,7 @@ export const times = Array.from(
   (_, i) =>
     `${String(Math.floor(i / 4)).padStart(2, "0")}:${["00", "15", "30", "45"][i % 4]}`,
 );
+export const endTimes = times.filter(t => t >= "10:00");
 export const startTimes = times.filter(t => t >= "10:00" && t <= "23:30");
 export const defaultShiftTimes = { start: "18:00", end: "18:15" };
 export function timeSelection(start: string) {

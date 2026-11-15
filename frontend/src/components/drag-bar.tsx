@@ -25,7 +25,7 @@ export function DragBar({shift, index, from, span, busy, name, onDetail, onMove}
     if (!g) return null;
     const dx = e.clientX-g.x + ((g.scroller?.scrollLeft || 0)-g.scroll);
     if (Math.abs(dx)>4) g.moved=true;
-    return g.moved ? dragShift(shift, dx/g.width*span, g.mode) : null;
+    return g.moved ? dragShift(shift, dx/g.width*span, g.mode, Math.min(600, minutes(shift.start))) : null;
   }
   async function end(e: PointerEvent<HTMLButtonElement>) {
     const result = position(e);

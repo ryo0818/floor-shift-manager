@@ -11,6 +11,7 @@ import {
   type Shift,
   type Status,
 } from "../domain/model";
+import { timelineRange, peakHeadcount } from "../domain/timeline";
 import { RequestChangeView } from "./request-change";
 import { DragBar } from "./drag-bar";
 import { Modal } from "./controls";
@@ -40,6 +41,7 @@ export function Timeline({
   onMove: (s: Shift) => Promise<void>;
   onStatus: (ids: string[], status: Status) => void;
 }) {
+  const [fit, setFit] = useState(true);
   const [detail, setDetail] = useState<string | null>(null);
   const days = daysOf(data.period).filter(d=>d>=earliestSelectableDate());
   const day = days.includes(date) ? date : (days.includes(initialDisplayDate(data.period)) ? initialDisplayDate(data.period) : days[0]);
@@ -51,8 +53,9 @@ export function Timeline({
     onStatus(ids, status);
   };
   return (
-    <div className="timeline-view">
+    <div className={`timeline-view ${fit ? "timeline-fit" : "timeline-detailed"}`}>
       <div className="timeline-toolbar">
+        <label><input type="checkbox" checked={fit} onChange={e=>setFit(e.target.checked)}/>時間軸を画面幅に合わせる</label>
         <button
           disabled={days.indexOf(day) === 0}
           onClick={() => onDate(days[days.indexOf(day) - 1])}
@@ -80,7 +83,7 @@ export function Timeline({
         </button>
       </div>
       <p className="timeline-hint">
-        未確定の横棒をドラッグして時間移動、両端をドラッグして開始・終了を変更（15分単位）。クリックでも時間・フロア調整と確定ができます。人数は検索・状態の絞り込みに関係なく、当日・当該フロアの全シフトから集計します。時間帯の人数は15分単位です。
+        未確定の横棒をドラッグして時間移動、両端をドラッグして開始・終了を変更（15分単位）。クリックでも時間・フロア調整と確定ができます。人数は検索・状態の絞り込みに関係なく、当日・当該フロアの全シフトから集計します。{fit ? "画面幅表示の人数は1時間内の最大同時人数です。15分ごとの人数や細かいドラッグ操作はチェックを外すと確認できます。" : "時間帯の人数は15分単位です。"}
       </p>
       <div className="timeline-legend">
         <span className="status pending">未確定</span>
@@ -98,9 +101,10 @@ export function Timeline({
           const shown = visible.filter(
             (s) => s.date === day && s.floorId === f.id,
           );
-          const from = 0, to = 1440;
+          const {from, to} = timelineRange(all);
+          const step = fit ? 60 : 15;
           const span = Math.max(60, to - from),
-            slots = Array.from({ length: span / 15 }, (_, i) => from + i * 15);
+            slots = Array.from({ length: span / step }, (_, i) => from + i * step);
           const hours = Array.from(
             { length: span / 60 + 1 },
             (_, i) => from + i * 60,
@@ -142,7 +146,7 @@ export function Timeline({
               >
                 <div
                   className="timeline-canvas"
-                  style={{ minWidth: Math.max(1000, (span / 15) * 25) + 160 }}
+                  style={{ minWidth: fit ? 0 : Math.max(1000, (span / 15) * 25) + 160 }}
                 >
                   <div className="timeline-line">
                     <div className="timeline-label">従業員 / 時刻</div>
@@ -150,9 +154,10 @@ export function Timeline({
                       {hours.map((h, i) => (
                         <span
                           key={h}
+                          className={h % 240 ? "minor-hour" : "major-hour"}
                           style={{ left: `${((i * 60) / span) * 100}%` }}
                         >
-                          {String(h / 60).padStart(2, "0")}:00
+                          {String(h / 60).padStart(2, "0")}
                         </span>
                       ))}
                     </div>
@@ -162,7 +167,7 @@ export function Timeline({
                     { label: "未確定希望人数", rows: pending, kind: "pending" },
                   ].map((group) => (
                     <div className="timeline-line" key={group.kind}>
-                      <div className="timeline-label">{group.label}</div>
+                      <div className="timeline-label">{group.label}{fit && <small>（時間内最大）</small>}</div>
                       <div
                         className="timeline-counts"
                         style={{
@@ -173,9 +178,9 @@ export function Timeline({
                           <span
                             className={group.kind}
                             key={t}
-                            title={`${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}〜 ${headcount(group.rows, t, t + 15)}人`}
+                            title={`${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}〜${Math.floor((t+step)/60)}:${String((t+step)%60).padStart(2,"0")} ${peakHeadcount(group.rows, t, t + step)}人`}
                           >
-                            {headcount(group.rows, t, t + 15)}
+                            {peakHeadcount(group.rows, t, t + step)}
                           </span>
                         ))}
                       </div>

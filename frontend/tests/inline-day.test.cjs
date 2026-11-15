@@ -60,3 +60,12 @@ test('希望入力の表記を勤務希望・休み希望に統一する',()=>{
  assert.match(render({}),/休み希望/);
  assert.match(render({rows:[{id:'r1',date:'2030-04-01',floorId:'f1',start:'18:00',end:'19:00',note:''}]}),/勤務希望/);
 });
+
+test('終了の選択欄は10時以降のみ、保存済み早朝値は表示だけ残す',()=>{
+ const row={id:'r',date:base.date,start:'18:00',end:'22:00',floorId:'f1',note:''};
+ const html=render({rows:[row]});
+ const end=html.match(/<select[^>]*希望1 終了[^>]*>(.*?)<\/select>/)[1];
+ assert.doesNotMatch(end,/value="0[0-9]:/);assert.doesNotMatch(end,/24:00/);assert.match(end,/23:45/);
+ const legacy=render({rows:[{...row,start:'08:00',end:'09:00'}]});
+ assert.match(legacy,/value="09:00" disabled="" selected=""/);
+});
