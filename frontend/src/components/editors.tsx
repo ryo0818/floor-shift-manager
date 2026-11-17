@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { Clock3 } from "lucide-react";
 import {
+  requestStartTimes, requestEndTimes, defaultRequestTimes, requestTimeSelection, dayName,
   Employee,
   EmploymentType,
   employmentNames,
@@ -46,6 +47,9 @@ export function ShiftEditor({
     [person, setPerson] = useState(employeeId),
     [ack, setAck] = useState(false),
     [error, setError] = useState("");
+  const starts = admin ? startTimes : requestStartTimes;
+  const ends = admin ? endTimes : requestEndTimes;
+  const defaults = admin ? defaultShiftTimes : defaultRequestTimes;
   const available = admin
     ? floors
     : floors.filter((f) =>
@@ -81,7 +85,7 @@ export function ShiftEditor({
   return (
     <Modal
       title={admin ? "シフトを調整" : "希望シフトを入力"}
-      description="開始・終了は15分単位です。休憩の入力は不要です。"
+      description={`開始・終了は${admin ? 15 : 30}分単位です。休憩の入力は不要です。`}
       close={() => !busy && onClose()}
     >
       <form onSubmit={save} className="edit-form">
@@ -101,7 +105,7 @@ export function ShiftEditor({
           </label>
         )}
         <label>
-          希望日
+          希望日 {r.date && `（${dayName(r.date)}）`}
           <input
             type="date"
             required
@@ -124,7 +128,7 @@ export function ShiftEditor({
             <small>割り当てフロアが1つのため変更できません。</small>
           )}
         </label>
-        <CheckBox checked={!!r.fullTime} label="フルタイム" onChange={() => change({fullTime: !r.fullTime, ...(r.fullTime ? defaultShiftTimes : {})})}/>
+        <CheckBox checked={!!r.fullTime} label="フルタイム" onChange={() => change({fullTime: !r.fullTime, ...(r.fullTime ? defaults : {})})}/>
         {r.fullTime && <small>フロア設定の時間：{r.start}〜{r.end}</small>}
         <div className="form-grid">
           <label>
@@ -132,9 +136,9 @@ export function ShiftEditor({
             <Picker
               label="開始時刻"
               value={r.start}
-              onChange={(v) => change(timeSelection(v))}
+              onChange={(v) => change(admin ? timeSelection(v) : requestTimeSelection(v))}
               disabled={!!r.fullTime}
-              items={[...(!startTimes.includes(r.start) ? [r.start] : []), ...startTimes].map((t) => ({ id: t, name: t, disabled: !startTimes.includes(t) }))}
+              items={[...(!starts.includes(r.start) ? [r.start] : []), ...starts].map((t) => ({ id: t, name: t, disabled: !starts.includes(t) }))}
             />
           </label>
           <label>
@@ -144,7 +148,7 @@ export function ShiftEditor({
               disabled={!!r.fullTime}
               value={r.end}
               onChange={(v) => change({ end: v })}
-              items={[...(!endTimes.includes(r.end) ? [r.end] : []), ...endTimes].map(t=>({id:t,name:t,disabled:!endTimes.includes(t)}))}
+              items={[...(!ends.includes(r.end) ? [r.end] : []), ...ends].map(t=>({id:t,name:t,disabled:!ends.includes(t)}))}
             />
           </label>
         </div>

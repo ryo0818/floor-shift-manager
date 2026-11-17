@@ -1,4 +1,4 @@
-import { headcount, minutes, type Shift, type Workspace } from "./model";
+import { dayName, headcount, minutes, type Shift, type Workspace } from "./model";
 
 // Preserve visibility of previously saved early/full-time shifts rather than clipping them.
 export function timelineRange(rows: Pick<Shift, "start">[]) {
@@ -21,7 +21,7 @@ export function originalRequestNote(shift: Shift, data: Pick<Workspace, "submiss
     Boolean(shift.fullTime) !== Boolean(original.fullTime);
   if (!changed) return null;
   const floor = data.floors.find(f => f.id === original.floorId)?.name ?? original.floorId;
-  return `元の希望：${original.date} ／ ${floor} ／ ${original.start}〜${original.end}${original.fullTime ? "（フルタイム）" : ""}`;
+  return `元の希望：${original.date}（${dayName(original.date)}） ／ ${floor} ／ ${original.start}〜${original.end}${original.fullTime ? "（フルタイム）" : ""}`;
 }
 
 /** UTC arithmetic keeps calendar-day navigation independent of host timezone/DST. */

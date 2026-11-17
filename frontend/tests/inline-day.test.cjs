@@ -28,11 +28,11 @@ test('入力途中を明示し、締切後は入力欄と削除を無効化',()=
  assert.match(html,/終了を開始より後/);assert.match(html,/<fieldset[^>]*disabled=""/);
  assert.match(html,/<button type="button" disabled="" class="text-btn"/);
 });
-test('時間指定の開始候補は10:00から15分刻み、未入力では希望を作成しない',()=>{
- const html=render({rows:[{id:'r',date:base.date,start:'18:00',end:'18:15',floorId:'f1',note:''}]});
+test('時間指定の開始候補は10:00から30分刻み、未入力では希望を作成しない',()=>{
+ const html=render({rows:[{id:'r',date:base.date,start:'18:00',end:'18:30',floorId:'f1',note:''}]});
  const start=html.match(/<select[^>]*希望1 開始[^>]*>(.*?)<\/select>/)[1];
  assert.doesNotMatch(start,/value="09:/);
- assert.match(start,/value="10:00"/); assert.match(start,/value="10:15"/);
+ assert.match(start,/value="10:00"/); assert.match(start,/value="10:30"/); assert.doesNotMatch(start,/value="10:15"/);
  assert.match(html,/フルタイム/); assert.match(html,/勤務希望/);
 });
 test('フルタイムでは開始・終了を無効化し、過去日のロックも維持',()=>{
@@ -43,9 +43,9 @@ test('フルタイムでは開始・終了を無効化し、過去日のロッ�
  assert.match(html,/<select[^>]*希望1 終了[^>]*disabled=""/);
  assert.match(render({rows:[row],past:true}),/<fieldset[^>]*disabled=""/);
 });
-test('勤務希望を選んだ行にフロアと18:00〜18:15を表示する',()=>{
- const html=render({rows:[{id:'r',date:base.date,start:'18:00',end:'18:15',floorId:'f1',note:''}]});
- assert.match(html,/<option value="18:00" selected="">/);assert.match(html,/<option value="18:15" selected="">/);
+test('勤務希望を選んだ行にフロアと18:00〜18:30を表示する',()=>{
+ const html=render({rows:[{id:'r',date:base.date,start:'18:00',end:'18:30',floorId:'f1',note:''}]});
+ assert.match(html,/<option value="18:00" selected="">/);assert.match(html,/<option value="18:30" selected="">/);
  assert.match(html,/<option value="f1" selected="">ホール/);
  assert.match(html,/勤務希望/);assert.doesNotMatch(html,/勤務予定/);
 });
@@ -65,7 +65,26 @@ test('終了の選択欄は10時以降のみ、保存済み早朝値は表示だ
  const row={id:'r',date:base.date,start:'18:00',end:'22:00',floorId:'f1',note:''};
  const html=render({rows:[row]});
  const end=html.match(/<select[^>]*希望1 終了[^>]*>(.*?)<\/select>/)[1];
- assert.doesNotMatch(end,/value="0[0-9]:/);assert.doesNotMatch(end,/24:00/);assert.match(end,/23:45/);
+ assert.doesNotMatch(end,/value="0[0-9]:/);assert.doesNotMatch(end,/24:00/);assert.match(end,/23:30/);assert.doesNotMatch(end,/23:45/);
  const legacy=render({rows:[{...row,start:'08:00',end:'09:00'}]});
  assert.match(legacy,/value="09:00" disabled="" selected=""/);
+});
+test('希望の日付は括弧付き曜日、旧15分値は選択不可の保存済み表示',()=>{
+ const html=render({rows:[{id:'r',date:base.date,start:'18:15',end:'21:45',floorId:'f1',note:''}]});
+ assert.match(html,/（月）/);assert.match(html,/value="18:15" disabled="" selected="">18:15（保存済み）/);
+});
+const {requestStartTimes,requestEndTimes,requestTimeSelection,defaultRequestTimes,startTimes,endTimes,timeSelection,validateRequestTimes}=load('src/domain/model.ts');
+test('従業員は30分単位と30分後の終了、管理者は15分単位を維持',()=>{
+ assert.ok(requestStartTimes.every(t=>/:(00|30)$/.test(t)));assert.equal(requestStartTimes.at(-1),'23:00');assert.equal(requestEndTimes.at(-1),'23:30');
+ assert.deepEqual(defaultRequestTimes,{start:'18:00',end:'18:30'});assert.deepEqual(requestTimeSelection('23:00'),{start:'23:00',end:'23:30'});
+ assert.ok(startTimes.includes('18:15'));assert.ok(endTimes.includes('21:45'));assert.equal(timeSelection('18:00').end,'18:15');
+});
+test('新しい15分希望は拒否、既存希望の時刻保持とフルタイムは許可',()=>{
+ const row={id:'legacy',date:base.date,start:'18:15',end:'21:45',note:'',floorId:'f1'};
+ assert.throws(()=>validateRequestTimes(row),/30分/);
+ assert.doesNotThrow(()=>validateRequestTimes({...row,note:'変更'},row));
+ assert.throws(()=>validateRequestTimes({...row,date:'2030-04-02'},row),/30分/);
+ assert.throws(()=>validateRequestTimes({...row,end:'22:15'},row),/30分/);
+ assert.doesNotThrow(()=>validateRequestTimes({...row,end:'22:30'},row));
+ assert.doesNotThrow(()=>validateRequestTimes({...row,fullTime:true}));
 });

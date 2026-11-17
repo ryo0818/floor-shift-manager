@@ -66,6 +66,16 @@ def pairs(rows):
                 yield a, b
 
 
+def validate_request_times(row, previous=None):
+    if row.get("fullTime"):
+        return
+    for key in ("start", "end"):
+        unchanged = (previous and not previous.get("fullTime") and previous["id"] == row["id"]
+                     and previous["date"] == row["date"] and previous[key] == row[key])
+        if row[key][-2:] not in ("00", "30") and not unchanged:
+            raise RuleError("希望の開始・終了は30分刻み（00分・30分）で入力してください。")
+
+
 def validate_row(row, period, allowed):
     try:
         day = date.fromisoformat(row["date"])
@@ -183,6 +193,7 @@ def apply(state, user, c, now=None):
                         raise RuleError("過去日の希望は入力・変更できません。", 409)
                     continue
                 resolve_full_time(row, state["floors"], employee)
+                validate_request_times(row, next((old for old in submission["draftRows"] if old["id"] == row["id"]), None))
                 validate_row(
                     row, period, [f for f in employee["floorIds"] if f in floor_ids]
                 )

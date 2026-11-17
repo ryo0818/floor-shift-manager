@@ -17,6 +17,7 @@ import {
   periodOf,
   today,
   validateRow,
+  validateRequestTimes,
   resolveFullTime,
   floorHours,
   times,
@@ -199,6 +200,7 @@ export function commandDemo(id: string, c: Command) {
         }
         Object.assign(row, resolveFullTime(row, floors, e.employmentType));
         validateRow(row, b.period, e.floorIds);
+        validateRequestTimes(row, s.draftRows.find(old => old.id === row.id));
       }
       if (c.note.length > 1000)
         throw new Error("提出全体のメモは1000文字以内で入力してください。");

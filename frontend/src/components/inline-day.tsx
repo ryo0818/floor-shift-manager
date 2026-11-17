@@ -1,16 +1,16 @@
 import { useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
-import { defaultShiftTimes, timeSelection, startTimes, endTimes, resolveFullTime, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
+import { defaultRequestTimes, requestTimeSelection, requestStartTimes, requestEndTimes, resolveFullTime, shortDate, dayName, conflicts, validateRow, type EmploymentType, type Row, type Floor, type Period } from "../domain/model";
 export function InlineDay({ date, rows, floors, period, disabled, employmentType = "partTime", past = false, onChange, onRemove, onRest }: {
   date: string; rows: Row[]; floors: Floor[]; period: Period; disabled: boolean; employmentType?: EmploymentType; past?: boolean;
   onChange: (r: Row) => void; onRemove: (r: Row) => void; onRest: () => void;
 }) {
   const [emptyId] = useState(()=>`day-${date}`);
-  const placeholder: Row = {id:emptyId, date, ...defaultShiftTimes, floorId:floors.length===1 ? floors[0].id : "", note:""};
+  const placeholder: Row = {id:emptyId, date, ...defaultRequestTimes, floorId:floors.length===1 ? floors[0].id : "", note:""};
   const displayed = rows;
   const locked = disabled || past;
   return <article className="day-card">
-    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>{dayName(date)}</span></h2><span role="status" className={`day-plan ${rows.length ? "work" : "rest"}`}>{rows.length ? "勤務希望" : "休み希望"}</span></div>
+    <div className="day-heading"><h2>{shortDate(date)} <span className={dayName(date)==="日" ? "sunday" : ""}>（{dayName(date)}）</span></h2><span role="status" className={`day-plan ${rows.length ? "work" : "rest"}`}>{rows.length ? "勤務希望" : "休み希望"}</span></div>
     {!past && <div className="day-choice" role="group" aria-label={`${shortDate(date)}の希望`}>
       <button type="button" className="btn secondary" aria-pressed={!!rows.length} disabled={locked || !floors.length} onClick={()=>{if(!rows.length)onChange(placeholder);}}>勤務希望</button>
       <button type="button" className="btn secondary" aria-pressed={!rows.length} disabled={locked} onClick={()=>{if(rows.length)onRest();}}>休み希望</button>
@@ -28,15 +28,15 @@ export function InlineDay({ date, rows, floors, period, disabled, employmentType
           {row.floorId && !floors.some(f=>f.id===row.floorId) && <option value={row.floorId}>割り当て外（要変更）</option>}
           {floors.map(f=><option key={f.id} value={f.id}>{f.name}</option>)}
         </select></label>
-        <label className="full-time-choice"><input type="checkbox" checked={!!row.fullTime} onChange={e=>change({fullTime:e.target.checked, ...(!e.target.checked ? defaultShiftTimes : {})})}/>フルタイム</label>
+        <label className="full-time-choice"><input type="checkbox" checked={!!row.fullTime} onChange={e=>change({fullTime:e.target.checked, ...(!e.target.checked ? defaultRequestTimes : {})})}/>フルタイム</label>
         {row.fullTime && <small>フロア設定の時間：{row.start}〜{row.end}</small>}
         <div className="inline-times">
-          <label>開始<select aria-label={`${shortDate(date)} 希望${index+1} 開始`} value={row.start} disabled={!!row.fullTime} onChange={e=>change(timeSelection(e.target.value))}>
-            <option value="">未入力</option>{row.start && !startTimes.includes(row.start) && <option value={row.start} disabled>{row.start}（保存済み）</option>}{startTimes.map(t=><option key={t} value={t}>{t}</option>)}
+          <label>開始<select aria-label={`${shortDate(date)} 希望${index+1} 開始`} value={row.start} disabled={!!row.fullTime} onChange={e=>change(requestTimeSelection(e.target.value))}>
+            <option value="">未入力</option>{row.start && !requestStartTimes.includes(row.start) && <option value={row.start} disabled>{row.start}（保存済み）</option>}{requestStartTimes.map(t=><option key={t} value={t}>{t}</option>)}
           </select></label>
           <span aria-hidden="true">〜</span>
           <label>終了<select aria-label={`${shortDate(date)} 希望${index+1} 終了`} value={row.end} disabled={!!row.fullTime} onChange={e=>change({end:e.target.value})}>
-            <option value="">未入力</option>{row.end && !endTimes.includes(row.end) && <option value={row.end} disabled>{row.end}（保存済み）</option>}{endTimes.map(t=><option key={t} value={t}>{t}</option>)}
+            <option value="">未入力</option>{row.end && !requestEndTimes.includes(row.end) && <option value={row.end} disabled>{row.end}（保存済み）</option>}{requestEndTimes.map(t=><option key={t} value={t}>{t}</option>)}
           </select></label>
         </div>
         <label>メモ（任意）<input aria-label={`${shortDate(date)} 希望${index+1} メモ`} maxLength={500} value={row.note} placeholder="この時間帯についての希望" onChange={e=>change({note:e.target.value})}/></label>

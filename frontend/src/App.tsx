@@ -1416,7 +1416,7 @@ export default function App() {
                           勤務可能フロアが未設定です。管理者に割り当てを依頼してください。
                         </div>
                       )}
-                      <p className="input-guide">① 日付ごとに勤務希望・休み希望を選択 → ② 時間を調整 → ③ 提出。未入力の日は休み希望です。</p>
+                      <p className="input-guide">① 日付ごとに勤務希望・休み希望を選択 → ② 時間を30分刻みで指定 → ③ 提出。未入力の日は休み希望です。</p>
                       <BatchDays key={data.period.id} rows={rows} floors={data.floors} period={data.period} employmentType={data.employees.find(e=>e.id===session.employeeId)?.employmentType} disabled={locked || busy} onApply={next=>{if(expired(data.period)||busy)return;setRows(next);setDirty(true);}}/>
                       <section className="employee-days">
                         {daysOf(data.period).map((d) => (

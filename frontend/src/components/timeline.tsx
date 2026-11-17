@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   minutes,
+  dayName,
   orderedEmployees,
   initialDisplayDate,
   headcount,
@@ -74,6 +75,7 @@ export function Timeline({
               if (e.target.validity.valid && e.target.value && e.target.value >= earliestSelectableDate()) onDate(e.target.value);
             }}
           />
+          <span>（{dayName(day)}）</span>
         </label>
         <button
           disabled={busy || !day}
@@ -227,7 +229,7 @@ export function Timeline({
       {active && (
         <Modal
           title={`${name(active.employeeId)}のシフト`}
-          description={`${active.date} · ${data.floors.find((f) => f.id === active.floorId)?.name}`}
+          description={`${active.date}（${dayName(active.date)}） · ${data.floors.find((f) => f.id === active.floorId)?.name}`}
           close={() => setDetail(null)}
         >
           <p className="timeline-detail-time">
