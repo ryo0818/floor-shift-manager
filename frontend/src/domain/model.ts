@@ -211,3 +211,20 @@ export function applyBatchRows(rows: Row[], dates: string[], template: Row | nul
   if (next.length > 500) throw new Error("希望は500件以内にしてください。");
   return next;
 }
+
+// Request input is independent of the administrator's quarter-hour controls.
+export const requestStartTimes = startTimes.filter(t => /:(00|30)$/.test(t) && t <= "23:00");
+export const requestEndTimes = endTimes.filter(t => /:(00|30)$/.test(t));
+export const defaultRequestTimes = { start: "18:00", end: "18:30" };
+export function requestTimeSelection(start: string) {
+  const index = times.indexOf(start);
+  return { start, end: index >= 0 ? times[index + 2] ?? "" : "" };
+}
+export function validateRequestTimes(row: Row, previous?: Row) {
+  if (row.fullTime) return;
+  for (const key of ["start", "end"] as const) {
+    const unchanged = previous && !previous.fullTime && previous.id === row.id && previous.date === row.date && previous[key] === row[key];
+    if (!/:(00|30)$/.test(row[key]) && !unchanged)
+      throw new Error("希望の開始・終了は30分刻み（00分・30分）で入力してください。");
+  }
+}

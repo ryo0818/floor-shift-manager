@@ -14,7 +14,7 @@ test('管理者の初期日付は日本時間の今日、対象外の半月は�
 });
 test('PDFは半月全日・選択フロア・状態・フルタイムを含み、名前はHTMLエスケープする',()=>{
  const html=pdf.periodPrintHtml(data,[shifts[0]],'f1','確定済み');
- assert.match(html,/11\/1<br>/);assert.match(html,/11\/15<br>/);
+ assert.match(html,/11\/1（日）/);assert.match(html,/11\/15（日）/);
  assert.match(html,/岡田 &amp; 稜/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<script>/);
  assert.match(html,/フルタイム/);assert.match(html,/確定済み/);assert.doesNotMatch(html,/テラス|従業員2|非公開メモ/);
  assert.match(html,/A3 landscape/);
@@ -22,7 +22,7 @@ test('PDFは半月全日・選択フロア・状態・フルタイムを含み�
 test('31日の後半・複数希望・空フロアも欠落なく出力',()=>{
  const p=m.makePeriod('2026-12-16');const rows=[{...shifts[0],date:'2026-12-31'},{...shifts[0],id:'c',date:'2026-12-31',start:'21:00',end:'22:00'}];
  const html=pdf.periodPrintHtml({...data,period:p},rows,'all','すべて');
- assert.match(html,/12\/16<br>/);assert.match(html,/12\/31<br>/);assert.match(html,/21:00/);
+ assert.match(html,/12\/16（水）/);assert.match(html,/12\/31（木）/);assert.match(html,/21:00/);
  assert.equal((html.match(/<section>/g)||[]).length,2);assert.match(html,/表示対象のシフトはありません/);
 });
 test('ポップアップ拒否はエラー、印刷はフォント読込後に呼ぶ',async()=>{
