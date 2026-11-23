@@ -10,7 +10,7 @@ VPS自体には接続していません。以下の確認で実際の設定と�
 - floor-shiftネットワーク、DBの実際の既存ボリュームをexternalとして利用します。
 - コンテナ名、DBのlocalhost:5432、frontendの公開8080を維持します。
 - backendの8000はホストに公開しません。他アプリのホスト8000とは競合しません。
-- 旧restart.sh、旧DB Composeと、このComposeを同時に運用しないでください。
+- 初回移行後は更新済みのrestart.shを使用します。旧docker run版のスクリプトや旧DB Composeとは併用しないでください。
 - ボリュームはバックアップではありません。別途バックアップを保管してください。
 
 ## 1. 既存DBの保存先・バージョン・ネットワークを確認（停止前）
@@ -116,16 +116,27 @@ curl -fsS https://platbase-tooltech.xvps.jp/api/health
 
 ## 5. 今後の更新
 
-マージ済みコードを取得し、必要なバックアップ後に実行します。
+初回移行が完了している場合は、リポジトリ直下で次を実行します。
 
 ```bash
 git pull --ff-only
-docker compose --env-file .env.production -f compose.production.yaml build backend frontend
-docker compose --env-file .env.production -f compose.production.yaml stop backend frontend
-docker compose --env-file .env.production -f compose.production.yaml run --rm --no-deps backend python -m app.manage migrate
-docker compose --env-file .env.production -f compose.production.yaml up -d --wait backend frontend
-docker exec platbase-nginx nginx -t && docker exec platbase-nginx nginx -s reload
+./restart.sh
 ```
+
+更新済みrestart.shは、Compose管理のfrontend/backend/DBと、稼働中のplatbase-nginxを確認します。
+未移行のdocker runコンテナがある場合は停止前に終了するため、先に上記の初回移行を完了してください。
+Linuxのflockと、`up --wait --wait-timeout`に対応するDocker Compose v2が必要です。
+
+実行順：設定・Nginx構文確認 → frontend/backendビルド → アプリ停止 → DBバックアップと目録検証 → migrate → アプリ起動待機 → frontend経由のAPI疎通確認 → Nginx reload。
+DBコンテナの再作成・DBイメージ更新・ボリューム削除は行いません。git pullもスクリプト内では行いません。
+
+バックアップはbackups/に権限を制限して保存します。目録検証は復元テストの代わりではありません。
+.env.productionとbackend/.env（特にSHIFT_CREDENTIAL_KEY）も別途安全に保管してください。
+バックアップの自動削除は行わないので、保存世代と空き容量を管理してください。
+
+ビルド失敗はアプリ停止前に終了します。停止以降のバックアップ・migrate・起動失敗では、
+失敗した工程と確認コマンドを表示して中断します。停止したアプリを自動で戻すことはしません。
+原因を解消して再実行してください。DBスキーマ変更後に古いアプリへ戻す場合は互換性確認が必要です。
 
 停止だけなら `docker compose --env-file .env.production -f compose.production.yaml stop`。
 .env.productionやbackend/.envの変更後は `up -d` で再作成を反映します。単なるrestartでは環境変数は更新されません。

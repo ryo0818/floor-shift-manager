@@ -3,6 +3,7 @@
 既存のDBボリュームと `floor-shift` ネットワークを引き継ぐ構成を追加しました。
 [Composeへの移行・バックアップ・起動手順](docs/PRODUCTION-COMPOSE.md) を確認してから使用してください。
 `platbase-nginx` と証明書更新は従来どおり別管理です。
+初回移行後は `git pull --ff-only` → `./restart.sh` でアプリを更新できます。
 
 # 従業員ログインの自動発行
 
