@@ -31,3 +31,7 @@ Thumbs.db
 
 # Certbot certificates and account keys
 /nginx-vps/certbot/conf/
+
+# Production runtime configuration and database backups
+/.env.production
+/backups/
