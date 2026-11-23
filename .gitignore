@@ -35,3 +35,6 @@ Thumbs.db
 # Production runtime configuration and database backups
 /.env.production
 /backups/
+
+# Deployment lock
+/.restart.lock
